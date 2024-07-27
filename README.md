@@ -4,5 +4,5 @@ A C++ library offering a robust collection of functionalities and tools to enhan
 ## Supported Remal Boards
 - Shabakah v3.x, v4
 
-#v1.0 - Git Release:
+## v1.0 - Git Release:
 - Added code to Git and started tracking changes here
