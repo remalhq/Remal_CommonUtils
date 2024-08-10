@@ -49,8 +49,9 @@ void loop() {
 }
 ```
 
-## v1.0 - Git Release:
-- Initial release to GitHub with full Arduino IDE support and essential features.
-
 ## Contributing
 We welcome contributions! If you wish to contribute, please submit a pull request with a clear description of your changes.
+
+## Changelog
+### v1.0 - Git Release:
+- Initial release to GitHub with full Arduino IDE support and examples.
