@@ -39,12 +39,14 @@ build_flags =
 ```cpp
 #include <Remal_CommonUtils.h>
 
-void setup() {
+void setup()
+{
     GenericUART_Struct logger = { .RX_Pin = 0, .TX_Pin = 0, .BaudRate = 115200 };
     RML_COMM_LoggerInit(&logger);
 }
 
-void loop() {
+void loop() 
+{
     RML_COMM_LogMsg("main", e_INFO, "Logging example message.");
 }
 ```
