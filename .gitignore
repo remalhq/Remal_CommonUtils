@@ -1,3 +1,9 @@
+# Added
+*.json
+*.cfg
+*.svd
+src.ino
+
 # Prerequisites
 *.d
 

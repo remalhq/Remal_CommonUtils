@@ -6,8 +6,6 @@
 #include "Remal_CommonUtils.h"
 
 
-
-
 /*********************************************
  * Private Enums
  *********************************************/
@@ -35,27 +33,43 @@ static uint8_t Logger_InitDone = 0;					//This flag is set to true when RML_COMM
  * architecture we are running on  
  */
 #if defined(ESP32)
+	#pragma message("Auto-detected to be running on ESP32, make sure you added the lines in platformio.ini to enable logging via native USB")
 	static uint8_t CurrentMCU = e_ESP_ESP32;
-	static uint32_t MaxBaudrate = 115200;			//Unused for ESP32 - As we use native USB serial which auto-detects baudrate
+	static uint32_t MaxBaudrate = 115200;
 	#define PUTCHAR_FUNC		Serial.printf("%c",		
 	#define PUTCHAR_N_FUNC		Serial.printf("%s",
 	static portMUX_TYPE LogSpinlock = portMUX_INITIALIZER_UNLOCKED;			//Define a spinlock object for the shared resource - so logging tasks dont clash
-#elif defined(STM32H7) || defined(STM32F411xE)
-	#include "stm32f4xx_hal.h"
+
+#elif defined(STM32H725xx) || defined(STM32H735xx)
+	#pragma message("Auto-detected to be running on STM32H7xxxx")
+	#include "stm32h7xx_hal.h"
 	#include <string.h>
 
-	extern UART_HandleTypeDef huart1;
+	SemaphoreHandle_t LogMutex;
+
+	/* Decide which UART to use based on the processor: */
+	#if defined(STM32H735xx)
+		extern UART_HandleTypeDef huart3;
+		#define STM32_UART_HNDLR	&huart3
+	#else
+		extern UART_HandleTypeDef huart1;
+		#define STM32_UART_HNDLR	&huart1
+	#endif
 
 	//Transmit a single character
 	void UART_PutChar(char ch)
 	{
-		HAL_UART_Transmit(&huart1, (uint8_t*)&ch, 1, HAL_MAX_DELAY);
+		//if( xSemaphoreTake(LogMutex, 1200) == pdTRUE )
+		//{
+			HAL_UART_Transmit(STM32_UART_HNDLR, (uint8_t*)&ch, 1, 1000);
+		//	xSemaphoreGive(LogMutex);
+		//}
 	}
 
 	//Transmit a string
-	void UART_PutChar_n(const char* str) 
+	void UART_PutChar_n(const char* str)
 	{
-		HAL_UART_Transmit(&huart1, (uint8_t*)str, strlen(str), HAL_MAX_DELAY);
+		HAL_UART_Transmit(STM32_UART_HNDLR, (uint8_t*)str, strlen(str), 1000);
 	}
 
 	static uint8_t CurrentMCU = e_STM32_STM32xx;
@@ -63,16 +77,13 @@ static uint8_t Logger_InitDone = 0;					//This flag is set to true when RML_COMM
 	#define PUTCHAR_N_FUNC		UART_PutChar_n(
 	static uint32_t MaxBaudrate = 115200;
 
-	SemaphoreHandle_t LogMutex;
 #else
+	#pragma message("Auto-detected to be running on PC or unsupported platform, defaulting to printf()")
 	//The lines below are used to add code specifically for machines with native printf() support
 	static uint8_t CurrentMCU = e_Native;
 	#define PUTCHAR_FUNC		printf("%c",		
 	#define PUTCHAR_N_FUNC		printf("%s",
 	static uint32_t MaxBaudrate = 115200;			//Unused for native
-#endif
-#if defined(STM32F411xE)
-	#warning "Using STM32F411xE, this library assumes you have already initialized USART1 and will use pins PA9 and PA10"
 #endif
 
 
@@ -124,22 +135,29 @@ int8_t RML_COMM_LoggerInit(GenericUART_Struct *UARTComm)
 	{
 		case e_ESP_ESP32:
 			#if defined(ESP32)
-			Serial.begin();
-			while(!Serial)
-			{
-				//Wait for serial port to connect
-			}
+			/* We use native USB port, no need to set pins */
+			Serial.begin(UARTComm->BaudRate);
+			Serial.setTxTimeoutMs(0);				//This is used to avoid waiting if the USB is not connected 
 			#endif
 			break;
 
 		case e_STM32_STM32xx:
-			#if defined(STM32F411xE)
-			// Nothing to do assuming the user already init USART1 and the pins are hard-wired to be
-			//		> RX Pin: A10
+
+			/* STM32H725: */
+			#if defined(STM32H725xx)
+			// Nothing to do assuming the user already init UART1 and the pins are hard-wired to be
+			//		> RX Pin: B15
 			//		> TX Pin: A9
 			LogMutex = xSemaphoreCreateMutex();
 			#endif
 
+			/* STM32H735: */
+			#if defined(STM32H735xx)
+			// Nothing to do assuming the user already init UART3 and the pins are hard-wired to be
+			//		> RX Pin: PD9
+			//		> TX Pin: PD8
+			LogMutex = xSemaphoreCreateMutex();
+			#endif
 			break;
 		
 		default:
@@ -156,13 +174,15 @@ int8_t RML_COMM_LoggerInit(GenericUART_Struct *UARTComm)
 
 
 
-void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, const char* Msg, ... )
+void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, char* Msg, ... )
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
 	{
 		return;
 	}
+
+	char *ColorStr = "";				//Used to color the log level string
 
 
 	/* Check if Log level is defined to be logged: */
@@ -173,6 +193,9 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, const char* Msg, ... )
 		{
 			return;
 		}
+
+		/* Debug is cyan */
+		ColorStr = ANSI_CYAN;
 	}
 	else if(LogLvl == e_INFO)
 	{
@@ -180,6 +203,9 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, const char* Msg, ... )
 		{
 			return;
 		}
+
+		/* Info is green */
+		ColorStr = ANSI_GREEN;
 	}
 	else if(LogLvl == e_WARNING)
 	{
@@ -187,6 +213,9 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, const char* Msg, ... )
 		{
 			return;
 		}
+
+		/* Warning is yellow */
+		ColorStr = ANSI_YELLOW;
 	}
 	else if(LogLvl == e_ERROR)
 	{
@@ -194,6 +223,9 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, const char* Msg, ... )
 		{
 			return;
 		}
+
+		/* Error is red */
+		ColorStr = ANSI_RED;
 	}
 	else if(LogLvl == e_FATAL)
 	{
@@ -201,6 +233,9 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, const char* Msg, ... )
 		{
 			return;
 		}
+
+		/* Fatal is bold red */
+		ColorStr = ANSI_BOLDRED;
 	}
 	else
 	{
@@ -212,12 +247,9 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, const char* Msg, ... )
 	taskENTER_CRITICAL(&LogSpinlock);
 	#endif
 
-	#if defined(STM32H7) || defined(STM32F411xE)
-	xSemaphoreTake(LogMutex, portMAX_DELAY);
-	#endif
-
 	/* The log message is sent by segments depending on
 	 * what needs to be sent or formatting */
+	PUTCHAR_N_FUNC ColorStr);					//Color string
 	PUTCHAR_N_FUNC "> [");
 
 	/* Output log level: */
@@ -243,14 +275,11 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, const char* Msg, ... )
 	va_end(VaList);							//Clean up the list
 
 	/* Newline */
+	PUTCHAR_N_FUNC ANSI_RESET);
 	PUTCHAR_N_FUNC "\r\n");
 
 	#if defined(ESP32)
 	taskEXIT_CRITICAL(&LogSpinlock);
-	#endif
-
-	#if defined(STM32H7) || defined(STM32F411xE)
-	xSemaphoreGive(LogMutex);
 	#endif
 }
 
@@ -303,7 +332,7 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable)
 
 
 
-void RML_COMM_printf( const char* InputStr, ... )
+void RML_COMM_printf( char * InputStr, ... )
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
@@ -322,7 +351,7 @@ void RML_COMM_printf( const char* InputStr, ... )
 
 
 
-void RML_COMM_vprintf( const char* InputStr, va_list VaList )
+void RML_COMM_vprintf( char * InputStr, va_list VaList )
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
@@ -700,5 +729,17 @@ int32_t RML_COMM_ftoa(double Value, char* ResultBuff, uint32_t BuffSize, uint8_t
 }
 
 
+
+void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber)
+{
+	// char FileNameStr[20] = {0};
+	// snprintf(FileNameStr, 20, "%s", FileName);
+	
+	/* 
+	 * Assertion failed - Pause debugger and look at values
+	 */
+	RML_COMM_LogMsg("RML_ASSERT", e_FATAL, "ASSERTION FAILED:\r\n\t--> File: %s\r\n\t--> Line: %u", FileName, LineNumber);
+	while(1);
+}
 
 

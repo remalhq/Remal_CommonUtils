@@ -1,17 +1,19 @@
 /**
  * @file 		Remal_CommonUtils.h
- * @author 		Khalid M AlAwadhi (khalid@remal.io), Remal
- * @date 		27 July 2024 (Initial release - 14 May 2020)
+ * @author 		Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
+ * @date 		9 August 2024 (Initial release - 14 May 2020)
  * 
- * @brief   	This library contains custom logger functionality that is portable across 
- *          	portable across multiple MCUs. If a certain MCU is not supported, the logger will route
- *  			the output to the native system printf() function.
+ * @brief   	This library provides various tools and utilities used by Remal developers on 
+ * 				Remal hardware and other platforms. It includes a portable logger functionality 
+ * 				compatible with multiple MCUs. If an MCU is not supported, the logger will default 
+ * 				to using the system's native printf() function for output.
  *
- * @note		Currently supported processor are:
- * 					> Native (PC)
- *          		> Espressif Systems ESP32 
- * 					> STM32 STM32F411xE
- * 					> [WORKING] STM32 STM32H7 and STM32F4
+ * @note		Currently Supported Processors:
+ * 					- Native (PC)
+ * 					- Espressif Systems ESP32 **(Remal Shabakah v3.x, v4)**
+ * 					- STM32 STM32H735xx
+ * 					- STM32 STM32H725xx
+ * 				Refer to the README.md file for more information about this library.
 **/
 #ifndef _REMAL_COMMONUTILS_H_
 #define _REMAL_COMMONUTILS_H_
@@ -23,22 +25,99 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 //<!-- ESP32 includes -->
 #if defined(ESP32)
 #include <Arduino.h>
+/* 
+	When using PlatformIO, the following must be added to the platformio.ini file:
+
+build_flags = 
+	-DARDUINO_USB_MODE=1
+	-DARDUINO_USB_CDC_ON_BOOT=1
+
+	This allows the ESP32 to use the USB port as a serial port, which this library uses for logging.
+*/
 #endif
 
 //<!-- STM32 includes -->
-#if defined(STM32H7) || defined(STM32F411xE)
+#if defined(STM32H725xx) || defined(STM32H735xx)
 #include "cmsis_os.h"
 #include "semphr.h"
 #endif
 
-/*################################################################################################################################
-  #													<!-- Defines/Structs/Enums -->
-  ################################################################################################################################*/
-/*************************************************************************************
+/*********************************************
+ * Defines
+ *********************************************/
+/**
+ * @brief This define is used to halt the program when an assert fails, it gets the
+ * filename and line number and calls RML_COMM_Assert() to loop forever.
+ * Symbol '-D' RML_ASSERT_ENABLE must be added or assert calls to work, else they 
+ * will be compiled out
+ */
+#ifdef RML_ASSERT_ENABLE
+#pragma message("RML_ASSERT() calls are enabled")
+#define BASENAME(_file) ((strrchr(_file, '/') ? : (strrchr(_file, '\\') ? : _file)) + 1)		//This is used to only get the filename from the full path
+#define RML_ASSERT(expr)										\
+		{														\
+			if (!(expr))										\
+			{													\
+				const char *file = BASENAME(__FILE__);			\
+				_RML_COMM_Assert(file, __LINE__);				\
+			}													\
+		}
+#else
+#pragma message("RML_ASSERT() calls are disabled")
+#define RML_ASSERT(expr)		((void)0)
+#endif
+
+//Logging:
+#define ENABLE_COLOR_SUPPORT			0				//Enable or disable color support for the logger
+//ANSI text colors:
+#if ENABLE_COLOR_SUPPORT
+#define ANSI_RESET     		"\x1B[0m"
+#define ANSI_BLACK     		"\x1B[30m"
+#define ANSI_RED       		"\x1B[31m"
+#define ANSI_GREEN     		"\x1B[32m"
+#define ANSI_YELLOW    		"\x1B[33m"
+#define ANSI_BLUE      		"\x1B[34m"
+#define ANSI_MAGENTA   		"\x1B[35m"
+#define ANSI_CYAN      		"\x1B[36m"
+#define ANSI_WHITE     		"\x1B[37m"
+#define ANSI_BOLDBLACK     	"\x1B[90m"
+#define ANSI_BOLDRED       	"\x1B[91m"
+#define ANSI_BOLDGREEN     	"\x1B[92m"
+#define ANSI_BOLDYELLOW    	"\x1B[93m"
+#define ANSI_BOLDBLUE      	"\x1B[94m"
+#define ANSI_BOLDMAGENTA   	"\x1B[95m"
+#define ANSI_BOLDCYAN      	"\x1B[96m"
+#define ANSI_BOLDWHITE     	"\x1B[97m"
+#else
+#define ANSI_RESET     		""
+#define ANSI_BLACK     		""
+#define ANSI_RED       		""
+#define ANSI_GREEN     		""
+#define ANSI_YELLOW    		""
+#define ANSI_BLUE      		""
+#define ANSI_MAGENTA   		""
+#define ANSI_CYAN      		""
+#define ANSI_WHITE     		""
+#define ANSI_BOLDBLACK     	""
+#define ANSI_BOLDRED       	""
+#define ANSI_BOLDGREEN     	""
+#define ANSI_BOLDYELLOW    	""
+#define ANSI_BOLDBLUE      	""
+#define ANSI_BOLDMAGENTA   	""
+#define ANSI_BOLDCYAN      	""
+#define ANSI_BOLDWHITE     	""
+#endif
+
+
+/*********************************************
+ * Structs
+ *********************************************/
+/**
  * @brief Custom UART structure to initialize a UART instance.
  *
  * This generic structure can be used to initialize a chosen UART instance on multiple 
@@ -46,10 +125,9 @@
  * a non-embedded system (like a PC), this struct is ignored and native printf() calls
  * are used.
  * 
- * Offers a lot of parameters to be modified. For more customizability, explore the 
- * initialization function itself as not all parameters are exposed in this custom 
- * structure. However, most of them are so you might not need to.
- *************************************************************************************/
+ * Offers some parameters to be modified. For more customizability, explore the 
+ * initialization function itself as not all parameters are exposed in this custom structure.
+ */
 typedef struct
 {
    	/** GPIO Pin of the RX */
@@ -62,10 +140,14 @@ typedef struct
 	uint32_t BaudRate;
 } GenericUART_Struct;
 
-/***************************************
+
+/*********************************************
+ * Enums
+ *********************************************/
+/**
  * @brief Log Level enum:
  * Used distinguish different log levels
- ***************************************/
+ */
 typedef enum
 {
 	e_DEBUG = 0,
@@ -74,6 +156,7 @@ typedef enum
 	e_ERROR = 3,
 	e_FATAL = 4
 } LogLevel_Enum;
+
 
 
 
@@ -90,15 +173,19 @@ typedef enum
  * 				- No parity
  * 				- 1 stop bit
  *
- * @note	ESP32:
- * 				On ESP32 we use native USB serial, you cannot choose the UART pins or baud rate. Any logs will simply be output
- * 				to the native USB serial port.
- * 			
- * @note	STM32:
- * 				If you're using this library on a STM32F411xE or STM32H7, it assumes you already have a UART instance initialized
- * 				throught the CubeMX code generator. Make sure to define and fill in the UARTComm struct with the correct
- * 				settings. Also, if you're using this library on a STM32F411xE it will assume you're using USART1 which is hardwired
- * 				to use pins PA9 and PA10, so the pins in the struct will be ignored.
+ * @note	If you're using Shabakah v3.x or higher (ESP32), this function will default to using the native USB
+ * 			port for logging. In the future we plan on having custom pin selection.
+ * 
+ * 			Also note when using PlatformIO, the following must be added to the platformio.ini file:
+ * 				build_flags = 
+ * 					-DARDUINO_USB_MODE=1
+ * 					-DARDUINO_USB_CDC_ON_BOOT=1
+ * 			This allows the ESP32 to use the USB port as a serial port, which this library uses for logging.
+ *   
+ * @note	If you're using this library on a STM32xx, it assumes you already have a UART instance initialized
+ * 			through the CubeMX code generator. Make sure to define and fill in the UARTComm struct with the correct
+ * 			settings. Additionally, check the function itself and see what UART instance it is using and pins so it
+ * 			matches your IOC file.
  * 
  * 
  * @param[in] UARTComm
@@ -109,7 +196,6 @@ typedef enum
  * 			0 on success, -1 on failure
  ************************************************************************************************************************/
 int8_t RML_COMM_LoggerInit(GenericUART_Struct *UARTComm);
-
 
 
 
@@ -142,8 +228,7 @@ int8_t RML_COMM_LoggerInit(GenericUART_Struct *UARTComm);
  * @return
  *          None
  ************************************************************************************************************************/
-void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, const char* Msg, ... );
-
+void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, char* Msg, ... );
 
 
 
@@ -166,7 +251,6 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, const char* Msg, ... );
  * 			0 on success, -1 if invalid log level
  ************************************************************************************************************************/
 int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable);
-
 
 
 
@@ -205,7 +289,7 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable);
  * @return
  * 			None
  ************************************************************************************************************************/
-void RML_COMM_printf( const char* InputStr, ... );
+void RML_COMM_printf( char * InputStr, ... );
 
 
 
@@ -237,8 +321,7 @@ void RML_COMM_printf( const char* InputStr, ... );
  * @return
  * 			None
  ************************************************************************************************************************/
-void RML_COMM_vprintf( const char* InputStr, va_list VaList );
-
+void RML_COMM_vprintf( char * InputStr, va_list VaList );
 
 
 
@@ -273,7 +356,6 @@ int32_t RML_COMM_utoa(uint32_t Value, char* ResultBuff, uint32_t ResultBuff_Size
 
 
 
-
 /************************************************************************************************************************
  * @brief 	Converts a signed integer to a string. Returns the length of the resulting string
  * 
@@ -302,7 +384,6 @@ int32_t RML_COMM_itoa(int32_t Value, char* ResultBuff, uint32_t ResultBuff_Size,
 
 
 
-
 /************************************************************************************************************************
  * @brief 	This function reverses a given string
  * 
@@ -317,7 +398,6 @@ int32_t RML_COMM_itoa(int32_t Value, char* ResultBuff, uint32_t ResultBuff_Size,
  * 			None
  ************************************************************************************************************************/
 void RML_COMM_ReverseString(char* Str, uint32_t Length);
-
 
 
 
@@ -343,6 +423,29 @@ void RML_COMM_ReverseString(char* Str, uint32_t Length);
  ************************************************************************************************************************/
 int32_t RML_COMM_ftoa(double Value, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Afterpoint);
 
+
+
+/************************************************************************************************************************
+ * @brief	This function is called when #define RML_ASSERT(expr) fails. It allows you to see in which file and line 
+ * 			number the assert failed. <b> Do not call directly, use the #define! </b>
+ * 
+ * @note	Symbol '-D' RML_ASSERT_ENABLE must be added for assert calls to work, else they will be compiled out. 
+ * 			This is done because each call to assert uses the __FILE__ macro which stores the entire filepath during 
+ * 			compile time. This takes up memory and depending on the hardware we might not have enough space. Having 
+ * 			a it be a symbol applied during building makes it easy to quickly remove all assert calls when not needed 
+ * 			to save space after debugging or for the Release build.
+ * 
+ *
+ * @param[in] FileName
+ * 			C preprocessor macro __FILE__ should be used here
+ * 
+ * @param[in] LineNumber
+ * 			C preprocessor macro __LINE__ should be used here
+ * 
+ * @return
+ * 			None
+ ************************************************************************************************************************/
+void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber);
 
 
 
