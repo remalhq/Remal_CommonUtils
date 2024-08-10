@@ -53,5 +53,5 @@ void loop() {
 We welcome contributions! If you wish to contribute, please submit a pull request with a clear description of your changes.
 
 ## Changelog
-### v1.0 - Git Release:
+### v1.0.0 - Git Release:
 - Initial release to GitHub with full Arduino IDE support and examples.
