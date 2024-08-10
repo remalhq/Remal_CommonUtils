@@ -16,23 +16,41 @@ The **Remal Common Utilities** library provides a set of essential tools and uti
 - **STM32 STM32H725xx**
 
 ## Getting Started
+
 ### Installation
-To install the library, download the latest release from the [Releases](ww) page and import it into your Arduino IDE or PlatformIO project.
+To install the library, download the latest release from the [Releases](https://github.com/remalhq/Remal_CommonUtils/releases) page and import it into your Arduino IDE or PlatformIO project.
 
 #### Arduino IDE
-If you're using the Arduino IDE, ensure that the USB CDC is enabled for the logger to work. Go to `Tools` > `USB CDC On Boot` and enable it.
+1. Download the latest release from the [Releases](https://github.com/remalhq/Remal_CommonUtils/releases) page.
+2. Open the Arduino IDE, navigate to `Sketch` > `Include Library` > `Add .ZIP Library...`.
+3. Select the downloaded ZIP file and click `Open`.
 
-#### PlatformIO
-For PlatformIO, add the following lines to your `platformio.ini` file:
+**Note:** Ensure that the USB CDC is enabled for the logger to function correctly. Go to `Tools` > `USB CDC On Boot` and enable it.
+
+#### PlatformIO (Enabling USB CDC)
+To enable the USB CDC feature in PlatformIO, add the following build flags to your `platformio.ini` file:
 ```ini
 build_flags = 
     -DARDUINO_USB_MODE=1
     -DARDUINO_USB_CDC_ON_BOOT=1
 ```
 
+## Example Usage (Logger)
+```cpp
+#include <Remal_CommonUtils.h>
+
+void setup() {
+    GenericUART_Struct logger = { .RX_Pin = 0, .TX_Pin = 0, .BaudRate = 115200 };
+    RML_COMM_LoggerInit(&logger);
+}
+
+void loop() {
+    RML_COMM_LogMsg("main", e_INFO, "Logging example message.");
+}
+```
+
 ## v1.0 - Git Release:
-- Added code to Git and started tracking changes here
-- Updated to match Arduino IDE library structure
+- Initial release to GitHub with full Arduino IDE support and essential features.
 
 ## Contributing
-If you wish to contribute to this library, please submit a pull request with a clear description of the changes.
+We welcome contributions! If you wish to contribute, please submit a pull request with a clear description of your changes.
