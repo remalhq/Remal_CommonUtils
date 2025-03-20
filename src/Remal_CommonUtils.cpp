@@ -343,7 +343,7 @@ void RML_COMM_printf( char * InputStr, ... )
 	va_list VaList;							//Declare Variable-length argument list to store any additional args
 	va_start(VaList, InputStr);				//Create a list for arguments given after 'InputStr'
 
-	RML_COMM_vprintf(InputStr, VaList);	//Call the vprintf function to handle the rest
+	RML_COMM_vprintf(InputStr, VaList);		//Call the vprintf function to handle the rest
 
 	va_end(VaList);							//Clean up the list
 }
@@ -363,8 +363,9 @@ void RML_COMM_vprintf( char * InputStr, va_list VaList )
 	char CharArg; 				//Will be used to store any char args
 	uint32_t UnsignedArg;		//Will be used to store any unsigned args
 	int32_t SignedArg;			//Will be used to store any signed args
-	char IntStr[20];			//Will be used to store any converted ints/floats/doubles
+	char IntStr[40];			//Will be used to store any converted ints/floats/doubles
 	double DoubleArg; 			//Will be used to store any double args
+	uint8_t Decimals;			//Will be used to store the number of decimal places for the float/double
 
 
 	/* Loop over the given string, check for '%' for formatting */
@@ -418,74 +419,56 @@ void RML_COMM_vprintf( char * InputStr, va_list VaList )
 				case 'X':
 				case 'x':
 					UnsignedArg = va_arg(VaList, uint32_t);										//Get the arg, type unsigned
-					RML_COMM_utoa(UnsignedArg, IntStr, sizeof(IntStr), 16);					//Convert unsigned int to ascii, base 16
+					RML_COMM_utoa(UnsignedArg, IntStr, sizeof(IntStr), 16);						//Convert unsigned int to ascii, base 16
 					PUTCHAR_N_FUNC IntStr);														//Print string
 					InputStr++;
 					break;
 
 				//User wants to set the number of decimal places for the float/double 
 				case '.':
-					InputStr++;																	//Get the next value whoch should be between 1-6
-					//Check what value InputStr contains:
-					switch(*InputStr)
+					InputStr++;																	//Get the next value which should be between 1-6
+					
+					Decimals = 0;
+
+					// Handle two-digit precision (e.g., .10 to .15)
+					if (isdigit(*InputStr))
 					{
-						//1 decimal place
-						case '1':
-							DoubleArg = va_arg(VaList, double);									//Get the arg, type double
-							RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), 1);				//Convert float/double to ascii, 1 decimal place
-							PUTCHAR_N_FUNC IntStr);												//Print string
-							InputStr = InputStr + 2;											//Increment to remove the 'f' specifier from printing
-							break;
+						Decimals = (*InputStr++) - '0';											//Get the number of decimal places
 
-						//2 decimal places
-						case '2':
-							DoubleArg = va_arg(VaList, double);									//Get the arg, type double
-							RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), 2);				//Convert float/double to ascii, 2 decimal places
-							PUTCHAR_N_FUNC IntStr);												//Print string
-							InputStr = InputStr + 2;											//Increment to remove the 'f' specifier from printing
-							break;
+						if (isdigit(*InputStr)) 												//Check if second digit
+						{
+							Decimals = (Decimals * 10) + ((*InputStr++) - '0');					//Get the second digit
+						}
+					}
+					
+					// Limit decimals to a maximum of 15
+					if (Decimals > 15)
+					{
+						Decimals = 15;
+					}
+					if (Decimals == 0)
+					{
+						Decimals = 2; 															//Default if somehow zero
+					}
 
-						//3 decimal places
-						case '3':
-							DoubleArg = va_arg(VaList, double);									//Get the arg, type double
-							RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), 3);				//Convert float/double to ascii, 3 decimal places
-							PUTCHAR_N_FUNC IntStr);												//Print string
-							InputStr = InputStr + 2;											//Increment to remove the 'f' specifier from printing
-							break;
-
-						//4 decimal places
-						case '4':
-							DoubleArg = va_arg(VaList, double);									//Get the arg, type double
-							RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), 4);				//Convert float/double to ascii, 3 decimal places
-							PUTCHAR_N_FUNC IntStr);												//Print string
-							InputStr = InputStr + 2;											//Increment to remove the 'f' specifier from printing
-							break;
-
-						//5 decimal places
-						case '5':
-							DoubleArg = va_arg(VaList, double);									//Get the arg, type double
-							RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), 5);				//Convert float/double to ascii, 3 decimal places
-							PUTCHAR_N_FUNC IntStr);												//Print string
-							InputStr = InputStr + 2;											//Increment to remove the 'f' specifier from printing
-							break;
-
-						//6 decimal places
-						case '6':
-							DoubleArg = va_arg(VaList, double);									//Get the arg, type double
-							RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), 6);				//Convert float/double to ascii, 3 decimal places
-							PUTCHAR_N_FUNC IntStr);												//Print string
-							InputStr = InputStr + 2;											//Increment to remove the 'f' specifier from printing
-							break;
-
-						//Unknown specifier - just print it
-						default:
-							PUTCHAR_FUNC *InputStr);											//Print char
-							InputStr++;
-							break;
+					if (*InputStr == 'f')
+					{
+						DoubleArg = va_arg(VaList, double);
+						RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), Decimals);
+						PUTCHAR_N_FUNC IntStr);
+						InputStr++; // move past 'f'
+					}
+					else
+					{
+						// Unknown specifier; print literally
+						PUTCHAR_FUNC '%');
+						PUTCHAR_FUNC '.');
+						PUTCHAR_FUNC *InputStr);
+						InputStr++;
 					}
 					break;
 
-				//Double/float value
+				//Double/float value with no specified decimal places
 				case 'f':
 					DoubleArg = va_arg(VaList, double);											//Get the arg, type double
 					RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), 2);						//Convert float/double to ascii, 2 decimal places by default
@@ -651,61 +634,69 @@ int32_t RML_COMM_ftoa(double Value, char* ResultBuff, uint32_t BuffSize, uint8_t
 	double FractionalPart = Value - WholePart;
 	uint32_t i = 0;
 	uint8_t NegativeFlag = 0;
-	
+
 	// Handle negative numbers
-	if( WholePart < 0 )
+	if (Value < 0)
 	{
 		NegativeFlag = 1;
 		WholePart = -WholePart;
 		FractionalPart = -FractionalPart;
 	}
 
+	// Convert fractional part to integer for rounding
+	double rounding = 0.5;
+	for (uint8_t j = 0; j < Afterpoint; ++j)
+		rounding /= 10;
+
+	FractionalPart += rounding;
+
+	if (FractionalPart >= 1.0)
+	{
+		WholePart += 1;
+		FractionalPart -= 1.0;
+	}
+
 	// Convert whole part to string
+	char TempBuff[32] = {0};
+	uint32_t idx = 0;
 	do
 	{
-		if (i < BuffSize)
-		{
-			ResultBuff[i++] = WholePart % 10 + '0';
-		}
+		TempBuff[idx++] = (WholePart % 10) + '0';
+		WholePart /= 10;
+	} while (WholePart && idx < sizeof(TempBuff) - 1);
+
+	if (NegativeFlag && idx < sizeof(TempBuff) - 1)
+		TempBuff[idx++] = '-';
+
+	// Reverse TempBuff into ResultBuff
+	while (idx--)
+	{
+		if (i < BuffSize - 1)
+			ResultBuff[i++] = TempBuff[idx];
 		else
 		{
 			ResultBuff[0] = '\0';
 			return -1;
 		}
-		WholePart /= 10;
-	} while (WholePart > 0);
-
-	if(NegativeFlag && i < BuffSize)
-	{
-		ResultBuff[i++] = '-';
 	}
 
-	// Reverse the string
-	RML_COMM_ReverseString(ResultBuff, i);
-	
-	
-	// if Afterpoint is non-zero, add a decimal point and the specified number of decimal places
-	if( Afterpoint > 0 )
+	// Add decimal point and fractional digits
+	if (Afterpoint > 0)
 	{
-		if (i < BuffSize)
-		{
+		if (i < BuffSize - 1)
 			ResultBuff[i++] = '.';
-		}
 		else
 		{
-			// Buffer is full
-			ResultBuff[i] = '\0';
+			ResultBuff[0] = '\0';
 			return -1;
 		}
-		
-		for( int32_t z = 0; z < Afterpoint; z++ )
+
+		for (uint8_t j = 0; j < Afterpoint; ++j)
 		{
 			FractionalPart *= 10;
-			int32_t digit = (int32_t)FractionalPart;
-			if (i < BuffSize)
-			{
+			int digit = (int)(FractionalPart);
+			if (i < BuffSize - 1)
 				ResultBuff[i++] = digit + '0';
-			}
 			else
 			{
 				ResultBuff[0] = '\0';
@@ -714,19 +705,12 @@ int32_t RML_COMM_ftoa(double Value, char* ResultBuff, uint32_t BuffSize, uint8_t
 			FractionalPart -= digit;
 		}
 	}
-	
-	// Add null terminator
-	if (i + 1 > BuffSize)
-	{
-		ResultBuff[0] = '\0'; // Return empty string if buffer size is too small
-	}
-	else
-	{
-		ResultBuff[i] = '\0';
-	}
 
-	return i;
+	ResultBuff[i] = '\0';
+
+	return i; // length of string
 }
+
 
 
 

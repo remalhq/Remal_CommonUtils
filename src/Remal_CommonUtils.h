@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <ctype.h>
 
 //<!-- ESP32 includes -->
 #if defined(ESP32)
@@ -270,7 +271,7 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable);
  * 				- %% => To print a '%'
  * 				- %X or %x => Hex value
  * 				- %f => Float/Double, default precision is 2 decimal places
- * 				- %.Xf => Float/Double, where X is the number of decimal places (up to 6 decimal places)
+ * 				- %.Xf => Float/Double, where X is the number of decimal places (up to 15 decimal places)
  * 
  * 			Why this was created? Mainly for 2 reasons:
  * 				1- printf() has a lot of code overhead and not recommend on embedded systems (that is assuming it
@@ -306,7 +307,7 @@ void RML_COMM_printf( char * InputStr, ... );
  * 				- %% => To print a '%'
  * 				- %X or %x => Hex value
  * 				- %f => Float/Double, default precision is 2 decimal places
- * 				- %.Xf => Float/Double, where X is the number of decimal places (up to 6 decimal places)
+ * 				- %.Xf => Float/Double, where X is the number of decimal places (up to 15 decimal places)
  *
  * @note	Base code was gotten from: https://www.youtube.com/watch?v=Y9kUWsyyChk. Thanks to him for the explanation 
  * 			and simplified logic!
@@ -403,7 +404,7 @@ void RML_COMM_ReverseString(char* Str, uint32_t Length);
 
 /************************************************************************************************************************
  * @brief 	This function converts a double-precision floating-point number to a string representation with a specified 
- * 			number of decimal places
+ * 			number of decimal places, up to 15 decimal places. Returns the length of the resulting string
  * 
  * 
  * @param[in] Value
