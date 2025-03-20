@@ -55,5 +55,11 @@ void loop()
 We welcome contributions! If you wish to contribute, please submit a pull request with a clear description of your changes.
 
 ## Changelog
+### v1.1.0:
+- Fixed bug in `RML_COMM_ftoa()` function affecting precision
+- Updated `RML_COMM_vprintf()` to support double precision floating-point numbers up to 15 decimal places from 6
+- Updated `Logger_FullDemo.ino` example to demonstrate double precision floating-point numbers
+- Added new example `Assert_Example.ino` to demonstrate assert handling using `RML_ASSERT()`
+
 ### v1.0.0 - Git Release:
 - Initial release to GitHub with full Arduino IDE support and examples.
