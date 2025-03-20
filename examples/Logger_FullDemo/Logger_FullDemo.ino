@@ -3,7 +3,7 @@
  * 
  * @author    Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
  * 
- * @date      August 9, 2024
+ * @date      21 March 2025
  * 
  * @brief     An in-depth example demonstrating the usage of the Remal logger with various log levels and format specifiers.
 */
