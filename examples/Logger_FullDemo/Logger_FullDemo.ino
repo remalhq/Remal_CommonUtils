@@ -70,15 +70,15 @@ void loop()
 	delay(MessageDelay_ms);
 
 	char c = 'A';
-	RML_COMM_LogMsg("loop", e_DEBUG, "Character(%%c): %c", c); // Log character using %c
+	RML_COMM_LogMsg("loop", e_DEBUG, "char(%%c): %c", c); // Log character using %c
 	delay(MessageDelay_ms);
 
 	unsigned int u = 123456;
-	RML_COMM_LogMsg("loop", e_DEBUG, "Unsigned Integer(%%u): %u", u); // Log unsigned integer using %u
+	RML_COMM_LogMsg("loop", e_DEBUG, "unsigned int(%%u): %u", u); // Log unsigned integer using %u
 	delay(MessageDelay_ms);
 
 	int i = -123456;
-	RML_COMM_LogMsg("loop", e_DEBUG, "Signed Integer(%%d or %%i): %d", i); // Log signed integer using %d or %i
+	RML_COMM_LogMsg("loop", e_DEBUG, "int(%%d or %%i): %d", i); // Log signed integer using %d or %i
 	delay(MessageDelay_ms);
 
 	/*
@@ -87,28 +87,47 @@ void loop()
 	RML_COMM_LogMsg("loop", e_DEBUG, "To print a '%%' character, you need to escape it by adding another '%%'");
 	delay(MessageDelay_ms);
 
-	float f = 101.123456;
-	RML_COMM_LogMsg("loop", e_DEBUG, "Float(%%f): %f", f); // Log float using %f
+	// Default float precision demonstration (2 decimal places)
+	float f = 5.272016;
+	RML_COMM_LogMsg("loop", e_DEBUG, "Default float precision (%%f): %f", f);
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_DEBUG, "By default, the logger prints floats with 2 decimal places");
+	// Demonstrate specifying custom decimal precision with float
+	RML_COMM_LogMsg("loop", e_DEBUG, "float with 4 decimals (%%.4f): %.4f", f);
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_DEBUG, "You can change the number of decimal places by adding a number after the '%%' character");
+	RML_COMM_LogMsg("loop", e_DEBUG, "float with 6 decimals (%%.6f): %.6f", f);
+	delay(MessageDelay_ms);
+
+	// Use double for higher precision
+	RML_COMM_LogMsg("loop", e_DEBUG, "For precision beyond 6 decimals, use a double:");
+	delay(MessageDelay_ms);
+
+	double d = 10.123456789123456;
+
+	// Demonstrating double precision clearly
+	RML_COMM_LogMsg("loop", e_DEBUG, "double with 10 decimals (%%.10f): %.10f", d);
+	delay(MessageDelay_ms);
+
+	RML_COMM_LogMsg("loop", e_DEBUG, "double with 12 decimals (recommended, %%.12f): %.12f", d);
+	delay(MessageDelay_ms);
+
+	RML_COMM_LogMsg("loop", e_DEBUG, "double with 15 decimals (max useful precision, %%.15f): %.15f", d);
+	delay(MessageDelay_ms);
+
+	// Explain limitations clearly
+	RML_COMM_LogMsg("loop", e_DEBUG, "Note: Due to floating-point limitations, precision beyond ~15 decimals may be inaccurate");
+	delay(MessageDelay_ms);
+
+	RML_COMM_LogMsg("loop", e_DEBUG, "If more than 15 decimal places are requested, the function defaults to 15 decimals");
+	delay(MessageDelay_ms);
+
+	RML_COMM_LogMsg("loop", e_DEBUG, "Recommendation: Stick to max 6 decimals for float, 10-12 decimals for double for reliable results");
 	delay(MessageDelay_ms);
 
 	/*
-	 * Demonstrate float formatting with different decimal places
+	 * Demonstrate printing numbers in hexadecimal
 	 */
-	RML_COMM_LogMsg("loop", e_DEBUG, "Float with 4 decimal places(%%.4f): %.4f", f);
-	delay(MessageDelay_ms);
-
-	RML_COMM_LogMsg("loop", e_DEBUG, "Float with 5 decimal places(%%.5f): %.5f", f);
-	delay(MessageDelay_ms);
-
-	RML_COMM_LogMsg("loop", e_DEBUG, "Float with 6 decimal places (max supported)(%%.6f): %.6f", f);
-	delay(MessageDelay_ms);
-
 	int number = 47802;
 	RML_COMM_LogMsg("loop", e_DEBUG, "You can also print numbers in hexadecimal");
 	delay(MessageDelay_ms);
