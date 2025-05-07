@@ -727,3 +727,87 @@ void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber)
 }
 
 
+
+
+void RML_SetupArduinoOTA(const char* Hostname, const char* Password)
+{
+	static char FuncName[] = "RML_SetupArduinoOTA";
+
+	/* Check if hostname is given */
+	if (Hostname != NULL)
+	{
+		ArduinoOTA.setHostname(Hostname);
+	}
+
+	/* Check if password is given */
+	if (Password != NULL)
+	{
+		ArduinoOTA.setPassword(Password);
+	}
+
+	/* Setup OTA handlers */
+	ArduinoOTA.onStart([]()
+	{
+		String type;
+
+		/* Check if the update is for the sketch or SPIFFS */
+		if (ArduinoOTA.getCommand() == U_FLASH) 
+		{
+			type = "sketch";
+		} 
+		else 
+		{ // U_SPIFFS
+			type = "filesystem";
+
+			/* NOTE: If updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end() */
+		}
+		
+		RML_COMM_LogMsg(FuncName, e_INFO, "Start updating %s", type.c_str());
+	});
+
+	ArduinoOTA.onEnd([]()
+	{
+		RML_COMM_LogMsg(FuncName, e_INFO, "End");
+	});
+
+	ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) 
+	{
+		RML_COMM_LogMsg(FuncName, e_INFO, "Progress: %u%%", (progress / (total / 100)));
+	});
+	
+	ArduinoOTA.onError([](ota_error_t error) 
+	{
+		RML_COMM_LogMsg(FuncName, e_ERROR, "Error[%u]: ", error);
+
+		if (error == OTA_AUTH_ERROR)
+		{
+			RML_COMM_LogMsg(FuncName, e_ERROR, "Auth Failed");
+		} 
+		else if (error == OTA_BEGIN_ERROR) 
+		{
+			RML_COMM_LogMsg(FuncName, e_ERROR, "Begin Failed");
+		} 
+		else if (error == OTA_CONNECT_ERROR) 
+		{
+			RML_COMM_LogMsg(FuncName, e_ERROR, "Connect Failed");
+		} 
+		else if (error == OTA_RECEIVE_ERROR) 
+		{
+			RML_COMM_LogMsg(FuncName, e_ERROR, "Receive Failed");
+		} 
+		else if (error == OTA_END_ERROR) 
+		{
+			RML_COMM_LogMsg(FuncName, e_ERROR, "End Failed");
+		}
+	});
+
+	ArduinoOTA.begin();
+}
+
+
+
+void RML_HandleArduinoOTA()
+{
+	/* Handle OTA updates */
+	ArduinoOTA.handle();
+}

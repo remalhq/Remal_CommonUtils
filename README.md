@@ -8,6 +8,7 @@ The **Remal Common Utilities** library provides a set of essential tools and uti
 - **Assert Handling**: Customizable assert function to handle errors with detailed file and line number reporting.
 - **Lightweight `printf()` Implementation**: Optimized for embedded systems, reducing overhead while maintaining functionality.
 - **String Conversion Utilities**: Functions to convert integers and floating-point numbers to strings, with support for various bases and precision.
+- **Arduino OTA Support**: Wrapper functions for Arduino OTA updates, making it easier to implement OTA functionality in your projects.
 
 ## Supported Processors
 - **Native (PC)**
@@ -51,10 +52,11 @@ void loop()
 }
 ```
 
-## Contributing
-We welcome contributions! If you wish to contribute, please submit a pull request with a clear description of your changes.
-
 ## Changelog
+### v1.2:
+- Added Arduino OTA wrapper functions: `RML_SetupArduinoOTA()` and `RML_HandleArduinoOTA()`
+- XXX
+
 ### v1.1.0:
 - Fixed bug in `RML_COMM_ftoa()` function affecting precision
 - Updated `RML_COMM_vprintf()` to support double precision floating-point numbers up to 15 decimal places from 6
@@ -63,3 +65,7 @@ We welcome contributions! If you wish to contribute, please submit a pull reques
 
 ### v1.0.0 - Git Release:
 - Initial release to GitHub with full Arduino IDE support and examples.
+
+
+## Contributing
+We welcome contributions! If you wish to contribute, please submit a pull request with a clear description of your changes.

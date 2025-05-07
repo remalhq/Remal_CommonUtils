@@ -40,6 +40,7 @@ build_flags =
 
 	This allows the ESP32 to use the USB port as a serial port, which this library uses for logging.
 */
+#include <ArduinoOTA.h>
 #endif
 
 //<!-- STM32 includes -->
@@ -425,7 +426,9 @@ void RML_COMM_ReverseString(char* Str, uint32_t Length);
 int32_t RML_COMM_ftoa(double Value, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Afterpoint);
 
 
-
+/*################################################################################################################################
+  #													<!-- Assert -->
+  ################################################################################################################################*/
 /************************************************************************************************************************
  * @brief	This function is called when #define RML_ASSERT(expr) fails. It allows you to see in which file and line 
  * 			number the assert failed. <b> Do not call directly, use the #define! </b>
@@ -447,6 +450,46 @@ int32_t RML_COMM_ftoa(double Value, char* ResultBuff, uint32_t ResultBuff_Size, 
  * 			None
  ************************************************************************************************************************/
 void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber);
+
+
+
+/*################################################################################################################################
+  #												<!-- Arduino OTA Wrapper -->
+  ################################################################################################################################*/
+/************************************************************************************************************************
+ * @brief	This function sets up the Arduino OTA (Over-The-Air) update functionality. It allows you to update the firmware of
+ * 			the ESP32 based Remal boards over Wi-Fi.
+ * 
+ * @note 	Make sure to call this function after the Wi-Fi connection is established! You also must keep calling 
+ * 			RML_HandleArduinoOTA() in the main loop or a task to handle the OTA update process.
+ *
+ * 
+ * @param[in] Hostname
+ * 			Hostname for the OTA update. This will be used to identify the device on the network.
+ * 			Pass NULL to use the default hostname (esp32-[MAC]).
+ * 
+ * @param[in] Password
+ * 			Password for the OTA update. This will be used to authenticate the OTA update process.
+ * 			Pass NULL to not use a password.
+ * 
+ * @return
+ * 			None
+ ************************************************************************************************************************/
+void RML_SetupArduinoOTA(const char* Hostname, const char* Password);
+
+
+
+/************************************************************************************************************************
+ * @brief	This function handles the Arduino OTA (Over-The-Air) update process. It should be called in the main loop or a 
+ * 			task to handle the OTA update process.
+ * 
+ * @note 	Make sure to call this function after the Wi-Fi connection is established and after calling 
+ * 			RML_SetupArduinoOTA()!
+ *
+ * @return
+ * 			None
+ ************************************************************************************************************************/
+void RML_HandleArduinoOTA();
 
 
 
