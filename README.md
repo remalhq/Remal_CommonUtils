@@ -3,6 +3,9 @@
 ## Overview
 The **Remal Common Utilities** library provides a set of essential tools and utilities used by Remal developers across various hardware platforms. The library includes a portable logging mechanism compatible with multiple microcontrollers (MCUs). If a specific MCU is not supported, the logger defaults to using the system's native `printf()` function. Additionally, the library provides a set of utilities that are commonly used in projects.
 
+**Bleeding edge development is pushed to the main branch and may contain bugs. For the latest stable version, please use the latest release.**
+
+
 ## Features
 - **Cross-platform Logging**: Supports logging on various MCUs, with a fallback to `printf()` on unsupported systems.
 - **Assert Handling**: Customizable assert function to handle errors with detailed file and line number reporting.
