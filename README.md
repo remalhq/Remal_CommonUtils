@@ -58,7 +58,7 @@ void loop()
 ## Changelog
 ### v1.2:
 - Added Arduino OTA wrapper functions: `RML_SetupArduinoOTA()` and `RML_HandleArduinoOTA()`
-- XXX
+- Added new example `OTA_Example.ino` to demonstrate OTA functionality
 
 ### v1.1.0:
 - Fixed bug in `RML_COMM_ftoa()` function affecting precision
