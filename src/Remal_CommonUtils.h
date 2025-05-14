@@ -39,8 +39,11 @@ build_flags =
 	-DARDUINO_USB_CDC_ON_BOOT=1
 
 	This allows the ESP32 to use the USB port as a serial port, which this library uses for logging.
+	You can also add the following to enable RML_ASSERT() calls:
+	-DRML_ASSERT_ENABLE=1
 */
 #include <ArduinoOTA.h>
+#include <Adafruit_NeoPixel.h>		//Library to control the RGB LEDs
 #endif
 
 //<!-- STM32 includes -->
@@ -163,9 +166,9 @@ typedef enum
 
 
 
-/*################################################################################################################################
-  #													<!-- Logging functions -->
-  ################################################################################################################################*/
+/**********************************************************************************************************************************
+ * 												<!-- Logging Functions -->
+ **********************************************************************************************************************************/
 /************************************************************************************************************************
  * @brief	Initializes the Logger. On a non-embedded system or a system with native printf() support like a PC this 
  * 			function does nothing.
@@ -256,9 +259,23 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable);
 
 
 
-/*################################################################################################################################
-  #													<!-- printf functions -->
-  ################################################################################################################################*/
+/************************************************************************************************************************
+ * @brief	Logs the stack usage of the current task. Greats for debugging purposes.
+ *
+ *
+ * @param[in] TaskStackSize
+ * 			The given stack size when the task was created e.g. xTaskCreate() or xTaskCreatePinnedToCore()
+ * 
+ * @return
+ * 			0 on success, -1 if invalid stack size
+ ************************************************************************************************************************/
+int8_t RML_COMM_LogStackUsage(size_t TaskStackSize);
+
+
+
+/**********************************************************************************************************************************
+ * 												<!-- Printf Functions -->
+ **********************************************************************************************************************************/
 /************************************************************************************************************************
  * @brief	Extremely lightweight implementation of printf() for embedded systems. Prints output to UART. In case this 
  * 			was run on a system that isn't supported, routes output to stdout via printf(). This function calls 
@@ -327,9 +344,9 @@ void RML_COMM_vprintf( char * InputStr, va_list VaList );
 
 
 
-/*################################################################################################################################
-  #													<!-- String convertor functions -->
-  ################################################################################################################################*/
+/**********************************************************************************************************************************
+ * 												<!-- Printf Helper Functions -->
+ **********************************************************************************************************************************/
 /************************************************************************************************************************
  * @brief 	Converts an unsigned integer to a string. Returns the length of the resulting string
  * 
@@ -426,9 +443,9 @@ void RML_COMM_ReverseString(char* Str, uint32_t Length);
 int32_t RML_COMM_ftoa(double Value, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Afterpoint);
 
 
-/*################################################################################################################################
-  #													<!-- Assert -->
-  ################################################################################################################################*/
+/**********************************************************************************************************************************
+ * 												<!-- Assert Functions -->
+ **********************************************************************************************************************************/
 /************************************************************************************************************************
  * @brief	This function is called when #define RML_ASSERT(expr) fails. It allows you to see in which file and line 
  * 			number the assert failed. <b> Do not call directly, use the #define! </b>
@@ -453,9 +470,9 @@ void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber);
 
 
 
-/*################################################################################################################################
-  #												<!-- Arduino OTA Wrapper -->
-  ################################################################################################################################*/
+/**********************************************************************************************************************************
+ * 												<!-- OTA Wrapper Functions -->
+ **********************************************************************************************************************************/
 /************************************************************************************************************************
  * @brief	This function sets up the Arduino OTA (Over-The-Air) update functionality. It allows you to update the firmware of
  * 			the ESP32 based Remal boards over Wi-Fi.
@@ -475,7 +492,7 @@ void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber);
  * @return
  * 			None
  ************************************************************************************************************************/
-void RML_SetupArduinoOTA(const char* Hostname, const char* Password);
+void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password);
 
 
 
@@ -489,7 +506,53 @@ void RML_SetupArduinoOTA(const char* Hostname, const char* Password);
  * @return
  * 			None
  ************************************************************************************************************************/
-void RML_HandleArduinoOTA();
+void RML_COMM_HandleArduinoOTA();
+
+
+
+/**********************************************************************************************************************************
+ * 												<!-- LED Wrapper Functions -->
+ **********************************************************************************************************************************/
+/************************************************************************************************************************
+ * @brief	A wrapper for Adafruit Neopixel library. Inits a given addressable LED
+ * 
+ * 
+ * @param[in] LED_Obj
+ * 			Adafruit_NeoPixel LED object, must be init already in your code. 
+ * 				Ex: Adafruit_NeoPixel Shbk_LED1(SHBK_NUM_LEDS, SHBK_LED_1_PIN, NEO_GRB + NEO_KHZ800); 
+ * 
+ * @param[in] Brightness
+ * 			The brightness to set the LED at. Range 0 - 255 XXX CHECK WHAT 0 DOES IF SET IN INIT 
+ * 
+ * @return
+ * 			None
+ ************************************************************************************************************************/
+void RML_COMM_LED_Init(Adafruit_NeoPixel &LED_Obj, uint8_t Brightness);
+
+
+
+/************************************************************************************************************************
+ * @brief	A wrapper for Adafruit Neopixel library. Sets the color of a given LED
+ * 
+ * 
+ * @param[in] LED_Obj
+ * 			Adafruit_NeoPixel LED object, must be init already in your code. 
+ * 				Ex: Adafruit_NeoPixel Shbk_LED1(SHBK_NUM_LEDS, SHBK_LED_1_PIN, NEO_GRB + NEO_KHZ800); 
+ * 
+ * @param[in] Red
+ * 			Red value of the color to set the LED to. Range 0 - 255	
+ * 
+ * @param[in] Green
+ * 			Green value of the color to set the LED to. Range 0 - 255
+ * 
+ * @param[in] Blue
+ * 			Blue value of the color to set the LED to. Range 0 - 255
+ * 
+ * @return
+ * 			0 on success, -1 if number of LEDs is invalid
+ ************************************************************************************************************************/
+int8_t RML_COMM_LED_SetLEDColor(Adafruit_NeoPixel &LED_Obj, uint8_t Red, uint8_t Green, uint8_t Blue);
+
 
 
 

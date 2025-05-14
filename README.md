@@ -56,6 +56,11 @@ void loop()
 ```
 
 ## Changelog
+### v1.3:
+- Created new wrapper functions for the `Adafruit NeoPixel` library to make it simpler to init and use addressable LEDs
+- Fixed function names and added `COMM_` prefix
+- Added new function `RML_COMM_LogStackUsage()` to easily log current stack usage for debugging purposes
+
 ### v1.2:
 - Added Arduino OTA wrapper functions: `RML_SetupArduinoOTA()` and `RML_HandleArduinoOTA()`
 - Added new example `OTA_Example.ino` to demonstrate OTA functionality

@@ -3,7 +3,7 @@
  * 
  * @author    Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
  * 
- * @date      May 7, 2025
+ * @date      May 14, 2025
  * 
  * @brief     Demonstrates how to enable OTA (Over-The-Air) firmware updates using the Remal CommonUtils library,
  *            while logging system status and messages over USB.
@@ -67,7 +67,7 @@ void setup()
   RML_COMM_LogMsg("Wi-Fi", e_INFO, "Connected! IP Address: %s", WiFi.localIP().toString().c_str());
   
   /* Setup OTA */
-  RML_SetupArduinoOTA(OTA_Hostname, OTA_Password);
+  RML_COMM_SetupArduinoOTA(OTA_Hostname, OTA_Password);
   RML_COMM_LogMsg("OTA", e_INFO, "OTA service initialized. Ready for updates! ^_^");
 
   /* Log useful information */
@@ -85,7 +85,7 @@ void loop()
   /* Handle OTA updates - This must be called in the loop! Also note that the below function must be 
    * called as frequently as possible to ensure OTA updates are handled properly. If calls are too slow,
    * the watchdog will kick in and reset the board */
-  RML_HandleArduinoOTA();
+  RML_COMM_HandleArduinoOTA();
    
   delay(1000);   // When using OTA updates, the loop must be fast to avoid watchdog resets
 }

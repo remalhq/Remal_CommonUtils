@@ -331,6 +331,42 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable)
 
 
 
+int8_t RML_COMM_LogStackUsage(size_t TaskStackSize)
+{
+	/* Error check: Stack size is valid */
+	if(TaskStackSize <= 0)
+	{
+		return -1;
+	}
+	
+	UBaseType_t StackFreeWords = uxTaskGetStackHighWaterMark(NULL);
+	UBaseType_t TotalStackWords = TaskStackSize;
+
+	// Calculate remaining free stack in bytes
+	UBaseType_t StackFreeBytes = StackFreeWords * sizeof(StackType_t);
+
+	// Calculate total stack in bytes
+	UBaseType_t TotalStackBytes = TotalStackWords * sizeof(StackType_t);
+
+	// Use float division to avoid truncation
+	float StackFreePercent = ((float)StackFreeBytes / TotalStackBytes) * 100.0f;
+	float StackUsedPercent = 100.0f - StackFreePercent;
+
+	// Log usage
+	RML_COMM_LogMsg(
+		pcTaskGetTaskName(NULL), 
+		e_DEBUG, 
+		"Stack usage: %.2f%% used, %.2f%% free (%u bytes free of %u bytes total)", 
+		StackUsedPercent, 
+		StackFreePercent, 
+		StackFreeBytes, 
+		TotalStackBytes
+	);
+
+	return 0;
+}
+
+
 
 void RML_COMM_printf( char * InputStr, ... )
 {
@@ -729,9 +765,9 @@ void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber)
 
 
 
-void RML_SetupArduinoOTA(const char* Hostname, const char* Password)
+void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 {
-	static char FuncName[] = "RML_SetupArduinoOTA";
+	static char FuncName[] = "RML_COMM_SetupArduinoOTA";
 
 	/* Check if hostname is given */
 	if (Hostname != NULL)
@@ -806,8 +842,44 @@ void RML_SetupArduinoOTA(const char* Hostname, const char* Password)
 
 
 
-void RML_HandleArduinoOTA()
+void RML_COMM_HandleArduinoOTA()
 {
 	/* Handle OTA updates */
 	ArduinoOTA.handle();
+}
+
+
+
+void RML_COMM_LED_Init(Adafruit_NeoPixel &LED_Obj, uint8_t Brightness)
+{
+	LED_Obj.begin();
+	LED_Obj.setBrightness(Brightness);
+	LED_Obj.clear();
+	LED_Obj.show();
+}
+
+
+
+int8_t RML_COMM_LED_SetLEDColor(Adafruit_NeoPixel &LED_Obj, uint8_t Red, uint8_t Green, uint8_t Blue)
+{
+	/// Get the number of LEDs
+	uint16_t NumLEDs = LED_Obj.numPixels();
+
+	// Error check: Make sure the number of LEDs is valid
+	if (NumLEDs == 0)
+	{
+		return -1;
+	}
+
+	// Set the color for the LED
+	const uint32_t Color = LED_Obj.Color(Red, Green, Blue);
+    LED_Obj.fill(Color, 0, NumLEDs);
+
+	// Show the color on the LEDs
+	LED_Obj.show();
+
+	// Wait for a short time to allow the LEDs to update
+	vTaskDelay(pdMS_TO_TICKS(1));
+
+	return 0;
 }
