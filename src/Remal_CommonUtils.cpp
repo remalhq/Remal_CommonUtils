@@ -331,7 +331,7 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable)
 
 
 
-int8_t RML_COMM_LogStackUsage(size_t TaskStackSize)
+int8_t RML_COMM_LogStackUsage(UBaseType_t TaskStackSize)
 {
 	/* Error check: Stack size is valid */
 	if(TaskStackSize <= 0)
@@ -340,28 +340,26 @@ int8_t RML_COMM_LogStackUsage(size_t TaskStackSize)
 	}
 	
 	UBaseType_t StackFreeWords = uxTaskGetStackHighWaterMark(NULL);
-	UBaseType_t TotalStackWords = TaskStackSize;
 
 	// Calculate remaining free stack in bytes
 	UBaseType_t StackFreeBytes = StackFreeWords * sizeof(StackType_t);
 
-	// Calculate total stack in bytes
-	UBaseType_t TotalStackBytes = TotalStackWords * sizeof(StackType_t);
+	// Calculate total stack in bytes (since TaskStackSize is in words)
+	UBaseType_t TotalStackBytes = TaskStackSize * sizeof(StackType_t);
 
 	// Use float division to avoid truncation
 	float StackFreePercent = ((float)StackFreeBytes / TotalStackBytes) * 100.0f;
 	float StackUsedPercent = 100.0f - StackFreePercent;
 
 	// Log usage
-	RML_COMM_LogMsg(
-		pcTaskGetTaskName(NULL), 
-		e_DEBUG, 
-		"Stack usage: %.2f%% used, %.2f%% free (%u bytes free of %u bytes total)", 
-		StackUsedPercent, 
-		StackFreePercent, 
-		StackFreeBytes, 
-		TotalStackBytes
-	);
+	RML_COMM_LogMsg(pcTaskGetTaskName(NULL),
+					e_DEBUG, 
+					"Stack usage: %.2f%% used, %.2f%% free (%u bytes free of %u bytes total)", 
+					StackUsedPercent, 
+					StackFreePercent, 
+					StackFreeBytes, 
+					TotalStackBytes
+					);
 
 	return 0;
 }

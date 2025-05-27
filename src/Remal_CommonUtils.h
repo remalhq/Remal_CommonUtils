@@ -269,7 +269,7 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable);
  * @return
  * 			0 on success, -1 if invalid stack size
  ************************************************************************************************************************/
-int8_t RML_COMM_LogStackUsage(size_t TaskStackSize);
+int8_t RML_COMM_LogStackUsage(UBaseType_t TaskStackSize);
 
 
 
