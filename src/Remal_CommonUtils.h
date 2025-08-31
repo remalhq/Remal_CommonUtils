@@ -1,12 +1,11 @@
 /**
  * @file 		Remal_CommonUtils.h
  * @author 		Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
- * @date 		9 August 2024 (Initial release - 14 May 2020)
+ * @date 		31 August 2025 (Initial release - 14 May 2020)
+ * @version		1.3
  * 
  * @brief   	This library provides various tools and utilities used by Remal developers on 
- * 				Remal hardware and other platforms. It includes a portable logger functionality 
- * 				compatible with multiple MCUs. If an MCU is not supported, the logger will default 
- * 				to using the system's native printf() function for output.
+ * 				Remal hardware and other platforms.
  *
  * @note		Currently Supported Processors:
  * 					- Native (PC)

@@ -1,38 +1,14 @@
-# Added
-*.json
-*.cfg
-*.svd
-src.ino
+######################################
+# Remal Master .gitignore file v1.0
+# This file is used to ignore files and directories
+# that should not be tracked by Git.
+######################################
 
-# Prerequisites
-*.d
+# VSCode settings
+.vscode/
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# MacOS Finder junk
+.DS_Store
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
+# General Files
+WifiCreds.h
