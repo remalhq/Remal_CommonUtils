@@ -1,8 +1,8 @@
 /**
  * @file 		Remal_CommonUtils.h
  * @author 		Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
- * @date 		31 August 2025 (Initial release - 14 May 2020)
- * @version		1.3
+ * @date 		Sept 9 2025 (Initial release - 14 May 2020)
+ * @version		1.4
  * 
  * @brief   	This library provides various tools and utilities used by Remal developers on 
  * 				Remal hardware and other platforms.
@@ -76,10 +76,11 @@ build_flags =
 #define RML_ASSERT(expr)		((void)0)
 #endif
 
-//Logging:
-#define ENABLE_COLOR_SUPPORT			0				//Enable or disable color support for the logger
-//ANSI text colors:
-#if ENABLE_COLOR_SUPPORT
+/**
+ * @brief This define is used to enable colored logs on terminals that support ANSI color codes.
+ * 	To enable colored logs, define 'RML_COLORLOG_ENABLE' before including this library.
+ */
+#ifdef RML_COLORLOG_ENABLE
 #define ANSI_RESET     		"\x1B[0m"
 #define ANSI_BLACK     		"\x1B[30m"
 #define ANSI_RED       		"\x1B[31m"
@@ -232,7 +233,7 @@ int8_t RML_COMM_LoggerInit(GenericUART_Struct *UARTComm);
  * @return
  *          None
  ************************************************************************************************************************/
-void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, char* Msg, ... );
+void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... );
 
 
 
@@ -307,7 +308,7 @@ int8_t RML_COMM_LogStackUsage(UBaseType_t TaskStackSize);
  * @return
  * 			None
  ************************************************************************************************************************/
-void RML_COMM_printf( char * InputStr, ... );
+void RML_COMM_printf( const char * InputStr, ... );
 
 
 
@@ -339,7 +340,7 @@ void RML_COMM_printf( char * InputStr, ... );
  * @return
  * 			None
  ************************************************************************************************************************/
-void RML_COMM_vprintf( char * InputStr, va_list VaList );
+void RML_COMM_vprintf( const char * InputStr, va_list VaList );
 
 
 
@@ -368,7 +369,7 @@ void RML_COMM_vprintf( char * InputStr, va_list VaList );
  * 			The base to use for the conversion. The base must be between 2 and 36
  * 
  * @return
- * 			The length of the resulting string. If the base is invalid or the result buffer is too small, -1 is returned
+ * 			The length of the resulting string, -1 on error
  ************************************************************************************************************************/
 int32_t RML_COMM_utoa(uint32_t Value, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Base);
 
@@ -396,7 +397,7 @@ int32_t RML_COMM_utoa(uint32_t Value, char* ResultBuff, uint32_t ResultBuff_Size
  * 			The base to use for the conversion. The base must be between 2 and 36
  * 
  * @return
- * 			The length of the resulting string. If the base is invalid or the result buffer is too small, -1 is returned
+ * 			The length of the resulting string, -1 on error
  ************************************************************************************************************************/
 int32_t RML_COMM_itoa(int32_t Value, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Base);
 
@@ -477,7 +478,7 @@ void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber);
  * 			the ESP32 based Remal boards over Wi-Fi.
  * 
  * @note 	Make sure to call this function after the Wi-Fi connection is established! You also must keep calling 
- * 			RML_HandleArduinoOTA() in the main loop or a task to handle the OTA update process.
+ * 			RML_COMM_HandleArduinoOTA() in the main loop or a task to handle the OTA update process.
  *
  * 
  * @param[in] Hostname
@@ -500,7 +501,7 @@ void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password);
  * 			task to handle the OTA update process.
  * 
  * @note 	Make sure to call this function after the Wi-Fi connection is established and after calling 
- * 			RML_SetupArduinoOTA()!
+ * 			RML_COMM_SetupArduinoOTA()!
  *
  * @return
  * 			None

@@ -27,6 +27,7 @@ typedef enum
  * Private Variables
  *********************************************/
 static uint8_t Logger_InitDone = 0;					//This flag is set to true when RML_COMM_LoggerInit() is called and is successful. Used for error handling
+static const char DIGITS[] = "ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; 	//Used for itoa/utoa functions
 
 /*
  * The statements below handle deciding what processor 
@@ -36,10 +37,9 @@ static uint8_t Logger_InitDone = 0;					//This flag is set to true when RML_COMM
 	#pragma message("Auto-detected to be running on ESP32, make sure you added the lines in platformio.ini to enable logging via native USB")
 	static uint8_t CurrentMCU = e_ESP_ESP32;
 	static uint32_t MaxBaudrate = 115200;
-	#define PUTCHAR_FUNC		Serial.printf("%c",		
-	#define PUTCHAR_N_FUNC		Serial.printf("%s",
-	static portMUX_TYPE LogSpinlock = portMUX_INITIALIZER_UNLOCKED;			//Define a spinlock object for the shared resource - so logging tasks dont clash
-
+	#define PUTCHAR_FUNC        Serial.printf("%c",
+	#define PUTCHAR_N_FUNC      Serial.printf("%s",
+	static SemaphoreHandle_t LogMutex = NULL;					// Mutex to protect logging from multiple tasks
 #elif defined(STM32H725xx) || defined(STM32H735xx)
 	#pragma message("Auto-detected to be running on STM32H7xxxx")
 	#include "stm32h7xx_hal.h"
@@ -118,9 +118,6 @@ char LogLevel_Str[5][10] =
 
 
 
-
-
-
 int8_t RML_COMM_LoggerInit(GenericUART_Struct *UARTComm)
 {
 	/* Error check: 
@@ -138,6 +135,12 @@ int8_t RML_COMM_LoggerInit(GenericUART_Struct *UARTComm)
 			/* We use native USB port, no need to set pins */
 			Serial.begin(UARTComm->BaudRate);
 			Serial.setTxTimeoutMs(0);				//This is used to avoid waiting if the USB is not connected 
+
+			/* Create mutex */
+			if (LogMutex == NULL)
+			{
+				LogMutex = xSemaphoreCreateMutex();
+			}
 			#endif
 			break;
 
@@ -174,7 +177,7 @@ int8_t RML_COMM_LoggerInit(GenericUART_Struct *UARTComm)
 
 
 
-void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, char* Msg, ... )
+void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
@@ -182,11 +185,11 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, char* Msg, ... )
 		return;
 	}
 
-	char *ColorStr = "";				//Used to color the log level string
+	const char *ColorStr = "";				// Used to color the log level string
 
 
 	/* Check if Log level is defined to be logged: */
-	uint8_t LogLvlUnknown = 0;			//Used to check if the Log level is defined or not
+	uint8_t LogLvlUnknown = 0;				// Used to check if the Log level is defined or not
 	if(LogLvl == e_DEBUG)
 	{
 		if(LogLevelsEnable[0] == 0)
@@ -244,7 +247,10 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, char* Msg, ... )
 	}
 
 	#if defined(ESP32)
-	taskENTER_CRITICAL(&LogSpinlock);
+	if (LogMutex)
+	{
+		xSemaphoreTake(LogMutex, portMAX_DELAY);
+	}
 	#endif
 
 	/* The log message is sent by segments depending on
@@ -279,7 +285,10 @@ void RML_COMM_LogMsg(char *Src, uint8_t LogLvl, char* Msg, ... )
 	PUTCHAR_N_FUNC "\r\n");
 
 	#if defined(ESP32)
-	taskEXIT_CRITICAL(&LogSpinlock);
+	if (LogMutex)
+	{
+		xSemaphoreGive(LogMutex);
+	}
 	#endif
 }
 
@@ -366,26 +375,39 @@ int8_t RML_COMM_LogStackUsage(UBaseType_t TaskStackSize)
 
 
 
-void RML_COMM_printf( char * InputStr, ... )
+void RML_COMM_printf( const char * InputStr, ... )
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
 	{
 		return;
 	}
+	
+	#if defined(ESP32)
+	if (LogMutex)
+	{
+		xSemaphoreTake(LogMutex, portMAX_DELAY);
+	}
+	#endif
 
-	va_list VaList;							//Declare Variable-length argument list to store any additional args
-	va_start(VaList, InputStr);				//Create a list for arguments given after 'InputStr'
+	va_list VaList;							// Declare Variable-length argument list to store any additional args
+	va_start(VaList, InputStr);				// Create a list for arguments given after 'InputStr'
 
-	RML_COMM_vprintf(InputStr, VaList);		//Call the vprintf function to handle the rest
+	RML_COMM_vprintf(InputStr, VaList);		// Call the vprintf function to handle the rest
 
-	va_end(VaList);							//Clean up the list
+	va_end(VaList);							// Clean up the list
+	
+	#if defined(ESP32)
+	if (LogMutex)
+	{
+		xSemaphoreGive(LogMutex);
+	}
+	#endif
 }
 
 
 
-
-void RML_COMM_vprintf( char * InputStr, va_list VaList )
+void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
@@ -533,116 +555,116 @@ void RML_COMM_vprintf( char * InputStr, va_list VaList )
 
 
 
-
-int32_t RML_COMM_utoa(uint32_t Value, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Base)
+int32_t RML_COMM_utoa(uint32_t v, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Base)
 {
-	// check that the base if valid
-	if (Base < 2 || Base > 36) 
+	/* Error check: ResultBuff is NULL */
+	if( ResultBuff == NULL )
 	{
-		// if the base is invalid, return an empty string
-		*ResultBuff = '\0';
 		return -1;
 	}
-	
-	// initialize pointers to the start and end of the result string
-	char* ptr = ResultBuff, *ptr1 = ResultBuff;
-	
-	// store the input value for later use
-	uint32_t tmp_value;
-	
-	// do-while loop to repeatedly divide the value by the base and store the remainder as a character in the result string
-	do
-	{
-		tmp_value = Value;
-		Value /= Base;
-		
-		// lookup the character for the current remainder in the lookup table and store it in the result string
-		*ptr++ = "ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" [35 + (tmp_value - Value * Base)];
-	} while ( Value );
-	
-	// check if the result buffer is large enough to hold the resulting string
-	if (ptr - ResultBuff >= ResultBuff_Size) 
-	{
-		// if the result buffer is too small, return an error
-		*ResultBuff = '\0';
-		return -1;
-	}
-	
-	// terminate the string
-	*ptr-- = '\0';
-	
-	// reverse the string
-	while(ptr1 < ptr)
-	{
-		char tmp_char = *ptr;
-		*ptr--= *ptr1;
-		*ptr1++ = tmp_char;
-	}
-	
-	// return the length of the string
-	return ptr - ResultBuff;
-}
 
+	/* Error check: ResultBuff_Size is 0 */
+	if( ResultBuff_Size == 0 )
+	{
+		return -1;
+	}
+
+	/* Error check: Base is valid */
+	if( Base < 2 || Base > 36 )
+	{
+		return -1;
+	}
+
+    uint32_t len = 0;
+
+    /* Build in reverse with strict bounds checking (always keep room for '\0') */
+    do
+	{
+		if (len + 1 >= ResultBuff_Size)
+		{ 
+			ResultBuff[0] = '\0';
+			return -1;
+		}
+        uint32_t q = v / Base;
+        uint32_t r = v - q * Base;               /* 0..Base-1 */
+        ResultBuff[len++] = DIGITS[35 + (int32_t)r];
+        v = q;
+    } while (v);
+
+    /* Reverse in-place */
+    for (uint32_t i = 0, j = len - 1; i < j; ++i, --j)
+	{
+        char t = ResultBuff[i]; 
+		ResultBuff[i] = ResultBuff[j]; 
+		ResultBuff[j] = t;
+    }
+
+    ResultBuff[len] = '\0';
+    return (int32_t)len;
+}
 
 
 
 int32_t RML_COMM_itoa(int32_t Value, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Base)
 {
-	// check that the base if valid
-	if (Base < 2 || Base > 36) 
+	/* Error check: ResultBuff is NULL */
+	if( ResultBuff == NULL )
 	{
-		// if the base is invalid, return an empty string
-		*ResultBuff = '\0';
 		return -1;
 	}
-	
-	// initialize pointers to the start and end of the result string
-	char* ptr = ResultBuff, *ptr1 = ResultBuff, tmp_char;
-	
-	// store the input value for later use
-	int32_t tmp_value, tmp_value2;
 
-	tmp_value2 = Value;
-	
-	// do-while loop to repeatedly divide the value by the base and store the remainder as a character in the result string
-	do 
+	/* Error check: ResultBuff_Size is 0 */
+	if( ResultBuff_Size == 0 )
 	{
-		tmp_value = Value;
-		Value /= Base;
-		
-		// lookup the character for the current remainder in the lookup table and store it in the result string
-		*ptr++ = "ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" [35 + (tmp_value - Value * Base)];
-	} while ( Value );
-
-	// handle negative values
-	if (tmp_value2 < 0 && Base == 10)
-	{
-		// store the negative sign in the result string
-		*ptr++ = '-';
-	}
-	
-	// check if the result buffer is large enough to hold the resulting string
-	if (ptr - ResultBuff >= ResultBuff_Size) 
-	{
-		// if the result buffer is too small, return an error
-		*ResultBuff = '\0';
 		return -1;
 	}
-	
-	// terminate the string
-	*ptr-- = '\0';
-	
-	// reverse the string
-	while (ptr1 < ptr) 
+
+	/* Error check: Base is valid */
+	if( Base < 2 || Base > 36 )
 	{
-		tmp_char = *ptr;
-		*ptr--= *ptr1;
-		*ptr1++ = tmp_char;
+		return -1;
 	}
-	
-	// return the length of the string
-	return ptr - ResultBuff;
+
+    uint32_t len = 0;
+    int32_t v = Value;
+
+    /* Build in reverse with strict bounds checking (always keep room for '\0') */
+    do 
+	{
+        if (len + 1 >= ResultBuff_Size)
+		{ 
+			ResultBuff[0] = '\0'; 
+			return -1;
+		}
+        int32_t q = v / (int32_t)Base;           /* truncates toward zero */
+        int32_t r = v - q * (int32_t)Base;       /* -(Base-1)..(Base-1) */
+        ResultBuff[len++] = DIGITS[35 + r];      /* handles negative r via lookup */
+        v = q;
+    } while (v);
+
+    /* Prepend '-' only for base 10, matching your original behavior */
+    if (Value < 0 && Base == 10)
+	{
+        if (len + 1 >= ResultBuff_Size)
+		{ 
+			ResultBuff[0] = '\0'; 
+			return -1;
+		}
+        ResultBuff[len++] = '-';
+    }
+
+    /* Reverse in-place */
+    for (uint32_t i = 0, j = len - 1; i < j; ++i, --j)
+	{
+        char t = ResultBuff[i]; 
+		ResultBuff[i] = ResultBuff[j]; 
+		ResultBuff[j] = t;
+    }
+
+    ResultBuff[len] = '\0';
+    return (int32_t)len;
 }
+
 
 
 
@@ -765,7 +787,7 @@ void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber)
 
 void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 {
-	static char FuncName[] = "RML_COMM_SetupArduinoOTA";
+	static const char FuncName[] = "RML_COMM_SetupArduinoOTA";
 
 	/* Check if hostname is given */
 	if (Hostname != NULL)
@@ -806,7 +828,11 @@ void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 
 	ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) 
 	{
-		RML_COMM_LogMsg(FuncName, e_INFO, "Progress: %u%%", (progress / (total / 100)));
+		// Clamp: if progress > total (shouldn't happen, but be safe) use total
+		const uint32_t capped = (total && progress > total) ? total : progress;
+		// Guard + 64-bit math: If total==0 → pct=0; else pct = floor((capped*100) / total) with 64-bit multiply
+		const uint32_t pct = total ? (uint32_t)(((uint64_t)capped * 100u) / (uint64_t)total) : 0u;
+		RML_COMM_LogMsg(FuncName, e_INFO, "Progress: %u%%", pct);
 	});
 	
 	ArduinoOTA.onError([](ota_error_t error) 

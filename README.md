@@ -45,7 +45,11 @@ build_flags =
 
 void setup()
 {
-    GenericUART_Struct logger = { .RX_Pin = 0, .TX_Pin = 0, .BaudRate = 115200 };
+    GenericUART_Struct logger = { 
+                                    .RX_Pin = 0, 
+                                    .TX_Pin = 0, 
+                                    .BaudRate = 115200 
+                                };
     RML_COMM_LoggerInit(&logger);
 }
 
@@ -56,6 +60,14 @@ void loop()
 ```
 
 ## Changelog
+### v1.4:
+- Renamed #define `ENABLE_COLOR_SUPPORT` to `RML_COLORLOG_ENABLE` for clarity and now users can enable/disable colored logs by defining it before including the library
+- Fixed bugs and edge cases in `RML_COMM_utoa()` and `RML_COMM_itoa()` and added proper error handling
+- Updated logging functions to use `const char*` which safely accept string literals and remove `-Wwrite-strings` warnings
+- Replaced the critical-section spinlock when on ESP32 with a FreeRTOS mutex in logging functions. This keeps interrupts enabled, preventing CPU starvation and interrupt-watchdog timeouts during heavy logging while still serializing output
+- Added mutex to `RML_COMM_printf()` to avoid interleaved output and race conditions
+- XXX
+
 ### v1.3:
 - Created new wrapper functions for the `Adafruit NeoPixel` library to make it simpler to init and use addressable LEDs
 - Fixed function names and added `COMM_` prefix
