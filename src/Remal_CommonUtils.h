@@ -1,18 +1,13 @@
 /**
  * @file 		Remal_CommonUtils.h
  * @author 		Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
- * @date 		Sept 9 2025 (Initial release - 14 May 2020)
+ * @date 		Oct 29 2025 (Initial release - 14 May 2020)
  * @version		1.4
  * 
- * @brief   	This library provides various tools and utilities used by Remal developers on 
- * 				Remal hardware and other platforms.
+ * @brief   	This library provides various tools and utilities to be used 
+ * 				on Remal hardware.
  *
- * @note		Currently Supported Processors:
- * 					- Native (PC)
- * 					- Espressif Systems ESP32 **(Remal Shabakah v3.x, v4)**
- * 					- STM32 STM32H735xx
- * 					- STM32 STM32H725xx
- * 				Refer to the README.md file for more information about this library.
+ * @note		Refer to the README.md file for more information about this library.
 **/
 #ifndef _REMAL_COMMONUTILS_H_
 #define _REMAL_COMMONUTILS_H_
@@ -28,28 +23,16 @@
 #include <ctype.h>
 
 //<!-- ESP32 includes -->
-#if defined(ESP32)
 #include <Arduino.h>
-/* 
-	When using PlatformIO, the following must be added to the platformio.ini file:
+#include "driver/uart.h"
 
-build_flags = 
-	-DARDUINO_USB_MODE=1
-	-DARDUINO_USB_CDC_ON_BOOT=1
+//<!-- Remal includes -->
+#include "Remal_BLE_Serial.h"
 
-	This allows the ESP32 to use the USB port as a serial port, which this library uses for logging.
-	You can also add the following to enable RML_ASSERT() calls:
-	-DRML_ASSERT_ENABLE=1
-*/
+//<!-- Arduino includes -->
 #include <ArduinoOTA.h>
-#include <Adafruit_NeoPixel.h>		//Library to control the RGB LEDs
-#endif
+#include <Adafruit_NeoPixel.h>
 
-//<!-- STM32 includes -->
-#if defined(STM32H725xx) || defined(STM32H735xx)
-#include "cmsis_os.h"
-#include "semphr.h"
-#endif
 
 /*********************************************
  * Defines
@@ -77,10 +60,9 @@ build_flags =
 #endif
 
 /**
- * @brief This define is used to enable colored logs on terminals that support ANSI color codes.
- * 	To enable colored logs, define 'RML_COLORLOG_ENABLE' before including this library.
+ * @brief Defines to add colored logs on support 
+ * terminals that support ANSI color codes.
  */
-#ifdef RML_COLORLOG_ENABLE
 #define ANSI_RESET     		"\x1B[0m"
 #define ANSI_BLACK     		"\x1B[30m"
 #define ANSI_RED       		"\x1B[31m"
@@ -98,52 +80,8 @@ build_flags =
 #define ANSI_BOLDMAGENTA   	"\x1B[95m"
 #define ANSI_BOLDCYAN      	"\x1B[96m"
 #define ANSI_BOLDWHITE     	"\x1B[97m"
-#else
-#define ANSI_RESET     		""
-#define ANSI_BLACK     		""
-#define ANSI_RED       		""
-#define ANSI_GREEN     		""
-#define ANSI_YELLOW    		""
-#define ANSI_BLUE      		""
-#define ANSI_MAGENTA   		""
-#define ANSI_CYAN      		""
-#define ANSI_WHITE     		""
-#define ANSI_BOLDBLACK     	""
-#define ANSI_BOLDRED       	""
-#define ANSI_BOLDGREEN     	""
-#define ANSI_BOLDYELLOW    	""
-#define ANSI_BOLDBLUE      	""
-#define ANSI_BOLDMAGENTA   	""
-#define ANSI_BOLDCYAN      	""
-#define ANSI_BOLDWHITE     	""
-#endif
-
-
-/*********************************************
- * Structs
- *********************************************/
-/**
- * @brief Custom UART structure to initialize a UART instance.
- *
- * This generic structure can be used to initialize a chosen UART instance on multiple 
- * MCUs. Check the library notes to see what processors are currently supported. On
- * a non-embedded system (like a PC), this struct is ignored and native printf() calls
- * are used.
- * 
- * Offers some parameters to be modified. For more customizability, explore the 
- * initialization function itself as not all parameters are exposed in this custom structure.
- */
-typedef struct
-{
-   	/** GPIO Pin of the RX */
-	int8_t RX_Pin;
-
-	/** GPIO Pin of the TX */
-	int8_t TX_Pin;
-
-	/** UART Baud Rate */
-	uint32_t BaudRate;
-} GenericUART_Struct;
+#define ANSI_WHITEONREDBG  	"\x1B[41;97m"
+#define ANSI_REDONWHITEBG  	"\x1B[47;31m"
 
 
 /*********************************************
@@ -162,6 +100,18 @@ typedef enum
 	e_FATAL = 4
 } LogLevel_Enum;
 
+/**
+ * @brief Log Protocol enum:
+ * Used to select which protocol to use for logging
+ */
+typedef enum
+{
+	e_USB = 0,
+	e_UART = 1,
+	e_BLE = 2,
+} LogProtocol_Enum;
+
+
 
 
 
@@ -169,38 +119,77 @@ typedef enum
 /**********************************************************************************************************************************
  * 												<!-- Logging Functions -->
  **********************************************************************************************************************************/
-/************************************************************************************************************************
- * @brief	Initializes the Logger. On a non-embedded system or a system with native printf() support like a PC this 
- * 			function does nothing.
+ /************************************************************************************************************************
+ * @brief	Initializes the logger, defaults to using native USB (USB CDC). 
  * 
- * 			=> UART Settings:
- * 				- 8 data bits
- * 				- No parity
- * 				- 1 stop bit
- *
- * @note	If you're using Shabakah v3.x or higher (ESP32), this function will default to using the native USB
- * 			port for logging. In the future we plan on having custom pin selection.
  * 
- * 			Also note when using PlatformIO, the following must be added to the platformio.ini file:
+ * @note	When using PlatformIO, the following must be added to the platformio.ini file:
  * 				build_flags = 
  * 					-DARDUINO_USB_MODE=1
  * 					-DARDUINO_USB_CDC_ON_BOOT=1
- * 			This allows the ESP32 to use the USB port as a serial port, which this library uses for logging.
- *   
- * @note	If you're using this library on a STM32xx, it assumes you already have a UART instance initialized
- * 			through the CubeMX code generator. Make sure to define and fill in the UARTComm struct with the correct
- * 			settings. Additionally, check the function itself and see what UART instance it is using and pins so it
- * 			matches your IOC file.
+ * 			This allows the ESP32 to use the USB port as a serial port, which this library uses for logging
  * 
- * 
- * @param[in] UARTComm
- * 			Structure that contains all the wanted UART settings to initialize. On systems that are not
- * 			embedded or do not support UART, this param is ignored
+ * @param[in] LoggingProtocol
+ * 			Use the LogProtocol_Enum to select which protocol to use for logging:
+ * 				- e_USB
+ * 				- e_UART
+ * 				- e_BLE
  *
  * @return
  * 			0 on success, -1 on failure
  ************************************************************************************************************************/
-int8_t RML_COMM_LoggerInit(GenericUART_Struct *UARTComm);
+int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol = e_USB);
+
+
+ /************************************************************************************************************************
+ * @brief	Overload - Initializes the logger using UART. UART is init with the following settings: 
+ * 				- 8 data bits
+ * 				- No parity
+ * 				- 1 stop bit
+ * 				- No flow control
+ * 
+ * 
+ * @param[in] LoggingProtocol
+ * 			Use the LogProtocol_Enum to select which protocol to use for logging:
+ * 				- e_USB
+ * 				- e_UART
+ * 				- e_BLE
+ * 
+ * @param[in] TX_Pin
+ * 			The TX pin to use for UART logging
+ * 
+ * @param[in] Baudrate
+ * 			The baudrate to use for UART logging
+ * 
+ * @param[in] UART_Num
+ * 			The UART instance to use. Use ESP32 defines, On Shabakah (ES32C3) options are:
+ * 				- UART_NUM_0 [Default]
+ * 				- UART_NUM_1
+ *
+ * @return
+ * 			0 on success, -1 on failure
+ ************************************************************************************************************************/
+int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Baudrate, uart_port_t UART_Num = UART_NUM_0);
+
+
+
+ /************************************************************************************************************************
+ * @brief	Overload - Initializes the logger using BLE (Bluetooth Low Energy).
+ * 
+ * 
+ * @param[in] LoggingProtocol
+ * 			Use the LogProtocol_Enum to select which protocol to use for logging:
+ * 				- e_USB
+ * 				- e_UART
+ * 				- e_BLE
+ * 
+ * @param[in] BT_Name
+ * 			The name of the BLE device that will be advertised for logging
+ *
+ * @return
+ * 			0 on success, -1 on failure
+ ************************************************************************************************************************/
+int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, char* BT_Name);
 
 
 
@@ -260,7 +249,24 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable);
 
 
 /************************************************************************************************************************
- * @brief	Logs the stack usage of the current task. Greats for debugging purposes.
+ * @brief	Enables or disables colored logs. By default, colored logs are disabled.
+ *
+ * 
+ * @param[in] Enable
+ * 			Enable or disable colored logs. 1 to enable, 0 to disable
+ *
+ * @return
+ * 			None
+ ************************************************************************************************************************/
+void RML_COMM_EnableColorLogs(uint8_t Enable);
+
+
+
+/**********************************************************************************************************************************
+ * 											<!-- FreeRTOS Helper Functions -->
+ **********************************************************************************************************************************/
+/************************************************************************************************************************
+ * @brief	Logs the stack usage of the current task. Great for debugging purposes.
  *
  *
  * @param[in] TaskStackSize

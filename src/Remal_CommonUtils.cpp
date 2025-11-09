@@ -7,84 +7,68 @@
 
 
 /*********************************************
- * Private Enums
- *********************************************/
-/***************************************
- * @brief CurrentMCU enum:
- * Used to give each MCU a value as 
- * opposed to a magic number.
- ***************************************/
-typedef enum
-{
-	e_Native = 0,
-	e_ESP_ESP32 = 1,
-	e_STM32_STM32xx = 2
-} CurrentMCU_Enum;
-
-
-
-/*********************************************
  * Private Variables
  *********************************************/
-static uint8_t Logger_InitDone = 0;					//This flag is set to true when RML_COMM_LoggerInit() is called and is successful. Used for error handling
-static const char DIGITS[] = "ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; 	//Used for itoa/utoa functions
+static uint8_t Logger_InitDone = 0;					// This flag is set to true when RML_COMM_LoggerInit() is called and is successful. Used for error handling
+static const char DIGITS[] = "ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; 	// Used for itoa/utoa functions
+static SemaphoreHandle_t LogMutex = nullptr;		// Mutex to protect logging from multiple tasks
+static uint8_t ColorLogsEnabled = false;			// Flag to indicate if colored logs are enabled
+static BLESerial BT_Device;							// BLE Serial object for BLE logging
 
-/*
- * The statements below handle deciding what processor 
- * architecture we are running on  
- */
-#if defined(ESP32)
-	#pragma message("Auto-detected to be running on ESP32, make sure you added the lines in platformio.ini to enable logging via native USB")
-	static uint8_t CurrentMCU = e_ESP_ESP32;
-	static uint32_t MaxBaudrate = 115200;
-	#define PUTCHAR_FUNC        Serial.printf("%c",
-	#define PUTCHAR_N_FUNC      Serial.printf("%s",
-	static SemaphoreHandle_t LogMutex = NULL;					// Mutex to protect logging from multiple tasks
-#elif defined(STM32H725xx) || defined(STM32H735xx)
-	#pragma message("Auto-detected to be running on STM32H7xxxx")
-	#include "stm32h7xx_hal.h"
-	#include <string.h>
+/*********************************************
+ * Function Pointers for logging backend
+ *********************************************/
+static void (*Main_putc)(char) = nullptr;			// Function pointer for putc function
+static void (*Main_puts)(const char*) = nullptr;	// Function pointer for puts function
 
-	SemaphoreHandle_t LogMutex;
 
-	/* Decide which UART to use based on the processor: */
-	#if defined(STM32H735xx)
-		extern UART_HandleTypeDef huart3;
-		#define STM32_UART_HNDLR	&huart3
-	#else
-		extern UART_HandleTypeDef huart1;
-		#define STM32_UART_HNDLR	&huart1
-	#endif
+// --- USB-CDC backend (Arduino Serial) ---
+static inline void USB_putc(char c)
+{
+	Serial.write((uint8_t)c);
+}
 
-	//Transmit a single character
-	void UART_PutChar(char ch)
+static inline void USB_puts(const char* s)
+{
+	if (s)
 	{
-		//if( xSemaphoreTake(LogMutex, 1200) == pdTRUE )
-		//{
-			HAL_UART_Transmit(STM32_UART_HNDLR, (uint8_t*)&ch, 1, 1000);
-		//	xSemaphoreGive(LogMutex);
-		//}
+		Serial.write((const uint8_t*)s, strlen(s)); 
 	}
+}
 
-	//Transmit a string
-	void UART_PutChar_n(const char* str)
+// --- UART backend (ESP-IDF driver) ---
+static uart_port_t SelectedUARTPort = UART_NUM_0;			// Used to store the selected UART port for logging, defaults to UART_NUM_0
+static inline void UART_putc(char c)
+{ 
+	uart_write_bytes(SelectedUARTPort, &c, 1); 
+}
+
+static inline void UART_puts(const char* s)
+{ 
+	if (s)
 	{
-		HAL_UART_Transmit(STM32_UART_HNDLR, (uint8_t*)str, strlen(str), 1000);
+		uart_write_bytes(SelectedUARTPort, s, strlen(s)); 
 	}
+}
 
-	static uint8_t CurrentMCU = e_STM32_STM32xx;
-	#define PUTCHAR_FUNC		UART_PutChar(		
-	#define PUTCHAR_N_FUNC		UART_PutChar_n(
-	static uint32_t MaxBaudrate = 115200;
+// --- BLE backend (Remal_BLE_Serial) ---
+static inline void BLE_putc(char c)
+{
+    if (BT_Device.IsConnected())
+    {
+        char buf[2] = { c, '\0' };   // make a valid null-terminated string
+        BT_Device.Send_Data(String(buf));
+    }
+}
 
-#else
-	#pragma message("Auto-detected to be running on PC or unsupported platform, defaulting to printf()")
-	//The lines below are used to add code specifically for machines with native printf() support
-	static uint8_t CurrentMCU = e_Native;
-	#define PUTCHAR_FUNC		printf("%c",		
-	#define PUTCHAR_N_FUNC		printf("%s",
-	static uint32_t MaxBaudrate = 115200;			//Unused for native
-#endif
+static inline void BLE_puts(const char* s)
+{
+    if (s && BT_Device.IsConnected())
+    {
+        BT_Device.Send_Data(String(s));   // convert to Arduino String for BLESerial
+    }
+}
+
 
 
 /*************************************************
@@ -118,62 +102,190 @@ char LogLevel_Str[5][10] =
 
 
 
-int8_t RML_COMM_LoggerInit(GenericUART_Struct *UARTComm)
+
+
+int8_t RML_COMM_LoggerInit()
+{
+	/* Default to USB logging */
+	return RML_COMM_LoggerInit(e_USB);
+}
+
+
+
+int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol)
 {
 	/* Error check: 
-	* is the baudrate greater than the max value or 0 */
-	if(UARTComm->BaudRate > MaxBaudrate || UARTComm->BaudRate == 0)
+	* Verify the LoggingProtocol is valid for the function */
+	if( LoggingProtocol != e_USB )
 	{
 		return -1;
 	}
 
-	/* Based on the processor we are running on, call different UART init functions: */
-	switch (CurrentMCU)
+	/* Error check:
+	 * Check if the logger was already init: */
+	if( Logger_InitDone )
 	{
-		case e_ESP_ESP32:
-			#if defined(ESP32)
-			/* We use native USB port, no need to set pins */
-			Serial.begin(UARTComm->BaudRate);
-			Serial.setTxTimeoutMs(0);				//This is used to avoid waiting if the USB is not connected 
-
-			/* Create mutex */
-			if (LogMutex == NULL)
-			{
-				LogMutex = xSemaphoreCreateMutex();
-			}
-			#endif
-			break;
-
-		case e_STM32_STM32xx:
-
-			/* STM32H725: */
-			#if defined(STM32H725xx)
-			// Nothing to do assuming the user already init UART1 and the pins are hard-wired to be
-			//		> RX Pin: B15
-			//		> TX Pin: A9
-			LogMutex = xSemaphoreCreateMutex();
-			#endif
-
-			/* STM32H735: */
-			#if defined(STM32H735xx)
-			// Nothing to do assuming the user already init UART3 and the pins are hard-wired to be
-			//		> RX Pin: PD9
-			//		> TX Pin: PD8
-			LogMutex = xSemaphoreCreateMutex();
-			#endif
-			break;
-		
-		default:
-			//Native selected - nothing to do
-			break;
+		return 0;		//Logger was already init, return success
 	}
 
+	/* 
+	 * USB Logging was selected: 
+	 */
+	Serial.begin();							// Native USB does not use baud rate
+	Serial.setTxTimeoutMs(0);				// This is used to avoid waiting if the USB is not connected 
+
+	/* 
+	 * Set function pointers for logging backend: 
+	 */
+	Main_putc = &USB_putc;
+	Main_puts = &USB_puts;
+
+	/* Create mutex */
+	if (LogMutex == NULL)
+	{
+		LogMutex = xSemaphoreCreateMutex();
+	}
+		
 	/* Logger was init successfully */
 	Logger_InitDone = 1;
 
 	return 0;
 }
 
+
+
+int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Baudrate, uart_port_t UART_Num)
+{
+	/* Error check: 
+	 * Verify the LoggingProtocol is valid for the function */
+	if( LoggingProtocol != e_UART )
+	{
+		return -1;
+	}
+
+	/* Error check:
+	 * Check if the logger was already init: */
+	if( Logger_InitDone )
+	{
+		return 0;		//Logger was already init, return success
+	}
+
+	/* Error check: 
+	 * Baudrate set to 0 */
+	if( Baudrate == 0 )
+	{
+		return -1;
+	}
+
+	/* Error check:
+	 * UART instance is valid and supported by the MCU */
+	if( UART_Num >= SOC_UART_NUM )
+	{
+		return -1;
+	}
+	
+	/* 
+	 * UART Logging was selected: 
+	 */
+  	// Configure UART parameters
+  	const uart_config_t UARTConfig =
+	{
+		.baud_rate = Baudrate,
+		.data_bits = UART_DATA_8_BITS,
+		.parity    = UART_PARITY_DISABLE,
+		.stop_bits = UART_STOP_BITS_1,
+		.flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+		.source_clk = UART_SCLK_APB,
+	};
+
+	// Apply configuration
+	if( uart_param_config(UART_Num, &UARTConfig) != ESP_OK )
+	{
+		return -1;
+	}
+
+	// Set UART pins
+	if( uart_set_pin(UART_Num, TX_Pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK )
+	{
+		return -1;
+	}
+
+	// Install UART driver with RX disabled, TX buffer 2048
+	if( uart_driver_install(UART_Num, /*rx*/0, /*tx*/2048, /*queue*/0, NULL, 0) != ESP_OK )
+	{
+		return -1;
+	}
+
+	SelectedUARTPort = UART_Num;			// Store the selected UART port for logging
+
+	/* 
+	 * Set function pointers for logging backend: 
+	 */
+	Main_putc = &UART_putc;
+	Main_puts = &UART_puts;
+
+	/* Create mutex */
+	if (LogMutex == NULL)
+	{
+		LogMutex = xSemaphoreCreateMutex();
+	}
+		
+	/* Logger was init successfully */
+	Logger_InitDone = 1;
+
+	return 0;
+}
+
+
+
+int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, char* BT_Name)
+{
+	/* Error check: 
+	 * Verify the LoggingProtocol is valid for the function */
+	if( LoggingProtocol != e_BLE )
+	{
+		return -1;
+	}
+
+	/* Error check:
+	 * Check if the logger was already init: */
+	if( Logger_InitDone )
+	{
+		return 0;		//Logger was already init, return success
+	}
+
+	/* Error check: 
+	 * BT_Name is null or length 0 */
+	if( BT_Name == nullptr || strlen(BT_Name) == 0 )
+	{
+		return -1;
+	}
+	
+	/* 
+	 * BT Logging was selected: 
+	 */
+	BT_Device.Init(BT_Name);
+
+	/* 
+	 * Set function pointers for logging backend: 
+	 */
+	Main_putc = &BLE_putc;
+	Main_puts = &BLE_puts;
+
+	/* Disable colored logs for BT */
+	RML_COMM_EnableColorLogs(0);
+
+	/* Create mutex */
+	if (LogMutex == NULL)
+	{
+		LogMutex = xSemaphoreCreateMutex();
+	}
+		
+	/* Logger was init successfully */
+	Logger_InitDone = 1;
+
+	return 0;
+}
 
 
 
@@ -198,7 +310,10 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 		}
 
 		/* Debug is cyan */
-		ColorStr = ANSI_CYAN;
+		if(ColorLogsEnabled)
+		{
+			ColorStr = ANSI_BOLDCYAN;
+		}
 	}
 	else if(LogLvl == e_INFO)
 	{
@@ -208,7 +323,10 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 		}
 
 		/* Info is green */
-		ColorStr = ANSI_GREEN;
+		if(ColorLogsEnabled)
+		{
+			ColorStr = ANSI_BOLDGREEN;
+		}
 	}
 	else if(LogLvl == e_WARNING)
 	{
@@ -218,7 +336,10 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 		}
 
 		/* Warning is yellow */
-		ColorStr = ANSI_YELLOW;
+		if(ColorLogsEnabled)
+		{
+			ColorStr = ANSI_BOLDYELLOW;
+		}
 	}
 	else if(LogLvl == e_ERROR)
 	{
@@ -228,7 +349,11 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 		}
 
 		/* Error is red */
-		ColorStr = ANSI_RED;
+		if(ColorLogsEnabled)
+		{
+		
+			ColorStr = ANSI_BOLDRED;
+		}
 	}
 	else if(LogLvl == e_FATAL)
 	{
@@ -238,7 +363,10 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 		}
 
 		/* Fatal is bold red */
-		ColorStr = ANSI_BOLDRED;
+		if(ColorLogsEnabled)
+		{
+			ColorStr = ANSI_REDONWHITEBG;
+		}
 	}
 	else
 	{
@@ -246,33 +374,31 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 		LogLvlUnknown = 1;
 	}
 
-	#if defined(ESP32)
 	if (LogMutex)
 	{
 		xSemaphoreTake(LogMutex, portMAX_DELAY);
 	}
-	#endif
 
 	/* The log message is sent by segments depending on
 	 * what needs to be sent or formatting */
-	PUTCHAR_N_FUNC ColorStr);					//Color string
-	PUTCHAR_N_FUNC "> [");
+	Main_puts(ColorStr);					//Color string
+	Main_puts("> [");
 
 	/* Output log level: */
 	if( LogLvlUnknown )
 	{
-		PUTCHAR_N_FUNC "Unknown LogLvl?");
+		Main_puts("Unknown LogLvl?");
 	}
 	else
 	{
-		PUTCHAR_N_FUNC LogLevel_Str[LogLvl]);	//LogLevel
+		Main_puts(LogLevel_Str[LogLvl]);	//LogLevel
 	}
-	PUTCHAR_N_FUNC "] ");
+	Main_puts("] ");
 	
 
 	/* Logs source of log (inception) */
-	PUTCHAR_N_FUNC Src);
-	PUTCHAR_N_FUNC ": ");
+	Main_puts(Src);
+	Main_puts(": ");
 
 	/* Logs message */
 	va_list VaList;							//Declare Variable-length argument list to store any additional args
@@ -281,15 +407,13 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 	va_end(VaList);							//Clean up the list
 
 	/* Newline */
-	PUTCHAR_N_FUNC ANSI_RESET);
-	PUTCHAR_N_FUNC "\r\n");
+	Main_puts(ANSI_RESET);
+	Main_puts("\r\n");
 
-	#if defined(ESP32)
 	if (LogMutex)
 	{
 		xSemaphoreGive(LogMutex);
 	}
-	#endif
 }
 
 
@@ -340,6 +464,26 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable)
 
 
 
+void RML_COMM_EnableColorLogs(uint8_t Enable)
+{
+	/* Error check: Makes sure the logger was initialized */
+	if(!Logger_InitDone)
+	{
+		return;
+	}
+
+	if(Enable)
+	{
+		ColorLogsEnabled = 1;
+	}
+	else
+	{
+		ColorLogsEnabled = 0;
+	}
+}
+
+
+
 int8_t RML_COMM_LogStackUsage(UBaseType_t TaskStackSize)
 {
 	/* Error check: Stack size is valid */
@@ -383,12 +527,10 @@ void RML_COMM_printf( const char * InputStr, ... )
 		return;
 	}
 	
-	#if defined(ESP32)
 	if (LogMutex)
 	{
 		xSemaphoreTake(LogMutex, portMAX_DELAY);
 	}
-	#endif
 
 	va_list VaList;							// Declare Variable-length argument list to store any additional args
 	va_start(VaList, InputStr);				// Create a list for arguments given after 'InputStr'
@@ -397,12 +539,10 @@ void RML_COMM_printf( const char * InputStr, ... )
 
 	va_end(VaList);							// Clean up the list
 	
-	#if defined(ESP32)
 	if (LogMutex)
 	{
 		xSemaphoreGive(LogMutex);
 	}
-	#endif
 }
 
 
@@ -437,22 +577,22 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 				//String
 				case 's':
 					StringArg = va_arg(VaList, char *);											//Get the arg, type string
-					PUTCHAR_N_FUNC StringArg);													//Print string
+					Main_puts(StringArg);														//Print string
 					InputStr++;																	//Increment to remove the specifier from printing
 					break;
 
 				//Character
 				case 'c':
 					CharArg = va_arg(VaList, int);												//Get the arg, type char (va_arg() needs int for char)
-					PUTCHAR_FUNC CharArg);														//Print char
+					Main_putc(CharArg);															//Print char
 					InputStr++;																	//Increment to remove the specifier from printing
 					break;
 
 				//Unsigned int
 				case 'u':
 					UnsignedArg = va_arg(VaList, uint32_t);										//Get the arg, type unsigned
-					RML_COMM_utoa(UnsignedArg, IntStr, sizeof(IntStr), 10);					//Convert unsigned int to ascii, base 10
-					PUTCHAR_N_FUNC IntStr);														//Print string
+					RML_COMM_utoa(UnsignedArg, IntStr, sizeof(IntStr), 10);						//Convert unsigned int to ascii, base 10
+					Main_puts(IntStr);															//Print string
 					InputStr++;																	//Increment to remove the specifier from printing
 					break;
 
@@ -461,13 +601,13 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 				case 'd':
 					SignedArg = va_arg(VaList, int32_t);										//Get the arg, type signed
 					RML_COMM_itoa(SignedArg, IntStr, sizeof(IntStr), 10);						//Convert signed int to ascii, base 10
-					PUTCHAR_N_FUNC IntStr); 													//Print string
+					Main_puts(IntStr); 															//Print string
 					InputStr++;																	//Increment to remove the specifier from printing
 					break;
 
 				//User wants to print a '%'
 				case '%':
-					PUTCHAR_FUNC '%');															//Print char
+					Main_putc('%');																//Print char
 					InputStr++;																	//Increment to remove the specifier from printing
 					break;
 
@@ -476,7 +616,7 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 				case 'x':
 					UnsignedArg = va_arg(VaList, uint32_t);										//Get the arg, type unsigned
 					RML_COMM_utoa(UnsignedArg, IntStr, sizeof(IntStr), 16);						//Convert unsigned int to ascii, base 16
-					PUTCHAR_N_FUNC IntStr);														//Print string
+					Main_puts(IntStr);															//Print string
 					InputStr++;
 					break;
 
@@ -511,15 +651,15 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 					{
 						DoubleArg = va_arg(VaList, double);
 						RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), Decimals);
-						PUTCHAR_N_FUNC IntStr);
+						Main_puts(IntStr);
 						InputStr++; // move past 'f'
 					}
 					else
 					{
 						// Unknown specifier; print literally
-						PUTCHAR_FUNC '%');
-						PUTCHAR_FUNC '.');
-						PUTCHAR_FUNC *InputStr);
+						Main_putc('%');
+						Main_putc('.');
+						Main_putc(*InputStr);
 						InputStr++;
 					}
 					break;
@@ -528,7 +668,7 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 				case 'f':
 					DoubleArg = va_arg(VaList, double);											//Get the arg, type double
 					RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), 2);						//Convert float/double to ascii, 2 decimal places by default
-					PUTCHAR_N_FUNC IntStr);														//Print string
+					Main_puts(IntStr);															//Print string
 					InputStr++;
 					break;
 
@@ -538,8 +678,8 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 
 				//Unknown specifier - just print it in hopes of the user realizing that
 				default:
-					PUTCHAR_FUNC '%');															//Print char
-					PUTCHAR_FUNC *InputStr);													//Print char
+					Main_putc('%');																//Print char
+					Main_putc(*InputStr);														//Print char
 					InputStr++;
 			}
 		}
@@ -547,7 +687,7 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 		/* Not a format specifier, print the char: */
 		else
 		{
-			PUTCHAR_FUNC *InputStr);															//Print char
+			Main_putc(*InputStr);																//Print char
 			InputStr++;																			//Move to next char in the string
 		}
 	}
@@ -776,10 +916,14 @@ void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber)
 	// snprintf(FileNameStr, 20, "%s", FileName);
 	
 	/* 
-	 * Assertion failed - Pause debugger and look at values
+	 * Assertion failed, log info
 	 */
 	RML_COMM_LogMsg("RML_ASSERT", e_FATAL, "ASSERTION FAILED:\r\n\t--> File: %s\r\n\t--> Line: %u", FileName, LineNumber);
-	while(1);
+	
+	while(1)
+	{
+		vTaskDelay(portMAX_DELAY);
+	}
 }
 
 

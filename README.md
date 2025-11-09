@@ -14,10 +14,7 @@ The **Remal Common Utilities** library provides a set of essential tools and uti
 - **Arduino OTA Support**: Wrapper functions for Arduino OTA updates, making it easier to implement OTA functionality in your projects.
 
 ## Supported Processors
-- **Native (PC)**
 - **Espressif Systems ESP32** (Remal Shabakah v3.x, v4)
-- **STM32 STM32H735xx**
-- **STM32 STM32H725xx**
 
 ## Getting Started
 
@@ -60,13 +57,25 @@ void loop()
 ```
 
 ## Changelog
-### v1.4:
-- Renamed #define `ENABLE_COLOR_SUPPORT` to `RML_COLORLOG_ENABLE` for clarity and now users can enable/disable colored logs by defining it before including the library
+### v1.4[IN PROGRESS]:
 - Fixed bugs and edge cases in `RML_COMM_utoa()` and `RML_COMM_itoa()` and added proper error handling
 - Updated logging functions to use `const char*` which safely accept string literals and remove `-Wwrite-strings` warnings
 - Replaced the critical-section spinlock when on ESP32 with a FreeRTOS mutex in logging functions. This keeps interrupts enabled, preventing CPU starvation and interrupt-watchdog timeouts during heavy logging while still serializing output
 - Added mutex to `RML_COMM_printf()` to avoid interleaved output and race conditions
-- XXX
+- Removed max baud rate limitation for logger 
+- Created new enum `LogProtocol_Enum` to select between different logging protocols (USB, UART, or BLE)
+- Removed `STM32` support as it's unused, this library will exclusively support `ESP32` going forward, we might add other MCUs in the future based on board support
+- Removed `GenericUART_Struct`
+- Removed `CurrentMCU_Enum` and related code as they are no longer needed
+- Removed MCU specific defines and includes: `ESP32`, `STM32H725xx`, `STM32H735xx`
+- Big rework of logger functions, `RML_COMM_LoggerInit()` now has different overloads to support different logging protocols => USB, UART, BLE
+- Removed usage of `PUTCHAR_FUNC` and `PUTCHAR_N_FUNC` defines
+- Created new internal functions `Main_putc()` and `Main_puts()` that dynamically get assigned based on the selected logging protocol backend at runtime
+- Updated `_RML_COMM_Assert()` to use `vTaskDelay(portMAX_DELAY)` instead of a busy-wait infinite loop to avoid CPU starvation
+- Removed `#define ENABLE_COLOR_SUPPORT` and replaced its use with function call to enable/disable colored logs at runtime: `RML_COMM_EnableColorLogs()`
+- Updated log level colors to be bold and fatal log level to be red-on-white background
+- Added new ANSI color defines red-on-white background and white-on-red background: `ANSI_WHITEONREDBG` and `ANSI_REDONWHITEBG`
+- XXX UPDATE README AND EXAMPLES TO REFLECT CHANGES XXX
 
 ### v1.3:
 - Created new wrapper functions for the `Adafruit NeoPixel` library to make it simpler to init and use addressable LEDs
