@@ -1,23 +1,27 @@
 # Remal CommonUtils Library
 
 ## Overview
-The **Remal Common Utilities** library provides a set of essential tools and utilities used by Remal developers across various hardware platforms. The library includes a portable logging mechanism compatible with multiple microcontrollers (MCUs). If a specific MCU is not supported, the logger defaults to using the system's native `printf()` function. Additionally, the library provides a set of utilities that are commonly used in projects.
+The **Remal Common Utilities** library provides a set of essential tools and utilities used by Remal developers across various hardware platforms. The library provides a set of utilities that are commonly used in projects such as logging, assert, LED control and Arduino OTA support.
 
 **Bleeding edge development is pushed to the main branch and may contain bugs. For the latest stable version, please use the latest release.**
 
+--
 
 ## Features
-- **Cross-platform Logging**: Supports logging on various MCUs, with a fallback to `printf()` on unsupported systems.
+- **Logging**: Supports logging on Remal Shabakah boards via USB CDC, UART and BLE with configurable log levels and color-coded output.
 - **Assert Handling**: Customizable assert function to handle errors with detailed file and line number reporting.
 - **Lightweight `printf()` Implementation**: Optimized for embedded systems, reducing overhead while maintaining functionality.
 - **String Conversion Utilities**: Functions to convert integers and floating-point numbers to strings, with support for various bases and precision.
 - **Arduino OTA Support**: Wrapper functions for Arduino OTA updates, making it easier to implement OTA functionality in your projects.
 
+-- 
+
 ## Supported Processors
 - **Espressif Systems ESP32** (Remal Shabakah v3.x, v4)
 
-## Getting Started
+--
 
+## Getting Started
 ### Installation
 To install the library, download the latest release from the [Releases](https://github.com/remalhq/Remal_CommonUtils/releases) page and import it into your Arduino IDE or PlatformIO project.
 
@@ -36,18 +40,14 @@ build_flags =
     -DARDUINO_USB_CDC_ON_BOOT=1
 ```
 
-## Example Usage (Logger)
+## Example Usage (Logger - USB CDC)
 ```cpp
 #include <Remal_CommonUtils.h>
 
 void setup()
 {
-    GenericUART_Struct logger = { 
-                                    .RX_Pin = 0, 
-                                    .TX_Pin = 0, 
-                                    .BaudRate = 115200 
-                                };
-    RML_COMM_LoggerInit(&logger);
+    RML_COMM_LoggerInit();          // Initialize logger with default settings (USB CDC, with all log levels enabled)
+    RML_COMM_EnableColorLogs(1);    // Enable colored log output
 }
 
 void loop() 
@@ -57,7 +57,7 @@ void loop()
 ```
 
 ## Changelog
-### v1.4[IN PROGRESS]:
+### v1.4 [IN PROGRESS]:
 - Fixed bugs and edge cases in `RML_COMM_utoa()` and `RML_COMM_itoa()` and added proper error handling
 - Updated logging functions to use `const char*` which safely accept string literals and remove `-Wwrite-strings` warnings
 - Replaced the critical-section spinlock when on ESP32 with a FreeRTOS mutex in logging functions. This keeps interrupts enabled, preventing CPU starvation and interrupt-watchdog timeouts during heavy logging while still serializing output
@@ -75,7 +75,8 @@ void loop()
 - Removed `#define ENABLE_COLOR_SUPPORT` and replaced its use with function call to enable/disable colored logs at runtime: `RML_COMM_EnableColorLogs()`
 - Updated log level colors to be bold and fatal log level to be red-on-white background
 - Added new ANSI color defines red-on-white background and white-on-red background: `ANSI_WHITEONREDBG` and `ANSI_REDONWHITEBG`
-- XXX UPDATE README AND EXAMPLES TO REFLECT CHANGES XXX
+- Updated README.md and examples to reflect changes in this version
+- XXX
 
 ### v1.3:
 - Created new wrapper functions for the `Adafruit NeoPixel` library to make it simpler to init and use addressable LEDs
