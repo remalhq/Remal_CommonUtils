@@ -56,7 +56,7 @@ static inline void BLE_putc(char c)
 {
     if (BT_Device.IsConnected())
     {
-        char buf[2] = { c, '\0' };   // make a valid null-terminated string
+        char buf[2] = { c, '\0' };   		// make a valid null-terminated string
         BT_Device.Send_Data(String(buf));
     }
 }
@@ -65,7 +65,7 @@ static inline void BLE_puts(const char* s)
 {
     if (s && BT_Device.IsConnected())
     {
-        BT_Device.Send_Data(String(s));   // convert to Arduino String for BLESerial
+        BT_Device.Send_Data(String(s));   	// convert to Arduino String for BLESerial
     }
 }
 
@@ -210,8 +210,8 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Bau
 		return -1;
 	}
 
-	// Install UART driver with RX disabled, TX buffer 2048
-	if( uart_driver_install(UART_Num, /*rx*/0, /*tx*/2048, /*queue*/0, NULL, 0) != ESP_OK )
+	// Install UART driver with RX and TX buffers even though RX is not used for logging but required by the driver
+	if( uart_driver_install(UART_Num, /*rx*/256, /*tx*/2048, /*queue*/0, NULL, 0) != ESP_OK )
 	{
 		return -1;
 	}
@@ -407,7 +407,10 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 	va_end(VaList);							//Clean up the list
 
 	/* Newline */
-	Main_puts(ANSI_RESET);
+	if (ColorLogsEnabled)
+	{
+		Main_puts(ANSI_RESET);
+	}
 	Main_puts("\r\n");
 
 	if (LogMutex)

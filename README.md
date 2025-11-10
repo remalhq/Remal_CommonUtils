@@ -8,7 +8,12 @@ The **Remal Common Utilities** library provides a set of essential tools and uti
 --
 
 ## Features
-- **Logging**: Supports logging on Remal Shabakah boards via USB CDC, UART and BLE with configurable log levels and color-coded output.
+- **Logging**: Supports logging on Remal Shabakah boards via various protocols with multiple log levels and optional colored output: 
+    - Log Levels: 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'
+    - Protocols:
+        - 'USB CDC'
+        - 'UART'
+        - 'Bluetooth Low Energy (BLE)' <-- Has some issues, use with caution. Will fix in future update.
 - **Assert Handling**: Customizable assert function to handle errors with detailed file and line number reporting.
 - **Lightweight `printf()` Implementation**: Optimized for embedded systems, reducing overhead while maintaining functionality.
 - **String Conversion Utilities**: Functions to convert integers and floating-point numbers to strings, with support for various bases and precision.
@@ -46,8 +51,8 @@ build_flags =
 
 void setup()
 {
-    RML_COMM_LoggerInit();          // Initialize logger with default settings (USB CDC, with all log levels enabled)
-    RML_COMM_EnableColorLogs(1);    // Enable colored log output
+    RML_COMM_LoggerInit(e_USB);     // Initialize logger with default settings (all log levels enabled)
+    RML_COMM_EnableColorLogs(1);    // Enable colored log output (Make sure your terminal supports ANSI colors, Arduino Serial Monitor does not support colors)
 }
 
 void loop() 
@@ -57,7 +62,7 @@ void loop()
 ```
 
 ## Changelog
-### v1.4 [IN PROGRESS]:
+### v1.4:
 - Fixed bugs and edge cases in `RML_COMM_utoa()` and `RML_COMM_itoa()` and added proper error handling
 - Updated logging functions to use `const char*` which safely accept string literals and remove `-Wwrite-strings` warnings
 - Replaced the critical-section spinlock when on ESP32 with a FreeRTOS mutex in logging functions. This keeps interrupts enabled, preventing CPU starvation and interrupt-watchdog timeouts during heavy logging while still serializing output
@@ -75,8 +80,10 @@ void loop()
 - Removed `#define ENABLE_COLOR_SUPPORT` and replaced its use with function call to enable/disable colored logs at runtime: `RML_COMM_EnableColorLogs()`
 - Updated log level colors to be bold and fatal log level to be red-on-white background
 - Added new ANSI color defines red-on-white background and white-on-red background: `ANSI_WHITEONREDBG` and `ANSI_REDONWHITEBG`
-- Updated README.md and examples to reflect changes in this version
-- XXX
+- Updated README.md
+- Updated 'Assert_Example.ino' to use new logger initialization function
+- Removed usage of Arduino 'String' class in all examples and replaced with standard C++ 'string' class
+- Split 'Logger_FullDemo.ino' example into three separate examples: 'Logger_FullDemo_USB.ino', 'Logger_FullDemo_UART.ino', and 'Logger_FullDemo_BluetoothLE.ino' to demonstrate different logging protocols
 
 ### v1.3:
 - Created new wrapper functions for the `Adafruit NeoPixel` library to make it simpler to init and use addressable LEDs

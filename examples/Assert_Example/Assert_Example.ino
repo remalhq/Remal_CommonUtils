@@ -3,7 +3,7 @@
  * 
  * @author    Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
  * 
- * @date      21 March 2025
+ * @date      Nov 10 2025
  * 
  * @brief     Simple demonstration of using RML_ASSERT with the Remal logger.
  *            This example shows how assertions can be used to validate critical 
@@ -25,27 +25,15 @@
  *            in memory-constrained environments like microcontrollers. Maybe do that 
  *            only when you are sure your code is bug-free and ready for release.
 */
-#define RML_ASSERT_ENABLE			// <---- Must be defined before including Remal_CommonUtils.h for asserts to work
+#define RML_ASSERT_ENABLE				// <---- Must be defined before including Remal_CommonUtils.h for asserts to work
 #include "Remal_CommonUtils.h"
 
 
 
 void setup() 
 {
-	/* Create a logger object */
-	GenericUART_Struct USBLogger =
-	{
-		.RX_Pin = 0,            // Native USB port
-		.TX_Pin = 0,
-		.BaudRate = 115200
-	};
-
-	/* Initialize the logger, pass the logger object */
-	if( RML_COMM_LoggerInit(&USBLogger) != 0 )
-	{
-		// Halt if the logger initialization fails
-		while(1);
-	}
+	/* Initialize the logger (By default, it uses USB CDC with all log levels enabled) */
+	RML_COMM_LoggerInit();
 
 	delay(5000);		// Give time for the user to open the serial monitor
 

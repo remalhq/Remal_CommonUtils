@@ -3,7 +3,7 @@
  * 
  * @author    Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
  * 
- * @date      May 14, 2025
+ * @date      Nov 10 2025
  * 
  * @brief     Demonstrates how to enable OTA (Over-The-Air) firmware updates using the Remal CommonUtils library,
  *            while logging system status and messages over USB.
@@ -29,18 +29,8 @@ int MaxWifiTimeout_ms = 20000;              // Max time to wait to establish Wi-
  
 void setup()
 {
-  /* Initialize logger */
-  GenericUART_Struct USBLogger =
-  {
-    .RX_Pin = 0,
-    .TX_Pin = 0,
-    .BaudRate = 115200
-  };
-  
-  if (RML_COMM_LoggerInit(&USBLogger) != 0)
-  {
-    while (1);
-  }
+  /* Initialize the logger */
+	RML_COMM_LoggerInit(e_USB);
   
   RML_COMM_LogMsg("setup", e_INFO, "Booting OTA example...");
   

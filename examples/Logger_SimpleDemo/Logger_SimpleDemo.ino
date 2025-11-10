@@ -3,9 +3,9 @@
  * 
  * @author    Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
  * 
- * @date      August 9, 2024
+ * @date      Nov 10 2025
  * 
- * @brief     A simple example demonstrating the usage of the Remal logger.
+ * @brief     A simple example demonstrating the usage of the Remal logger using USB.
 */
 #include "Remal_CommonUtils.h"
 
@@ -15,20 +15,8 @@ int MessageDelay_ms = 2000;         // Delay between log messages in millisecond
 
 void setup() 
 {
-	/* Create a logger object */
-	GenericUART_Struct USBLogger =
-	{
-		.RX_Pin = 0,            // On Shabakah, we use the native USB port for logging
-		.TX_Pin = 0,            // Which means pins 18 and 19 are automatically used
-		.BaudRate = 115200
-	};
-
-	/* Initialize the logger, pass the logger object */
-	if( RML_COMM_LoggerInit(&USBLogger) != 0 )
-	{
-		// If the logger fails to initialize, then we will be stuck in this loop
-		while(1);
-	}
+	/* Initialize the logger using USB (By default all log levels enabled) */
+	RML_COMM_LoggerInit(e_USB);
 }
 
 
