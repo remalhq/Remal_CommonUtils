@@ -5,11 +5,15 @@ The **Remal Common Utilities** library provides a set of essential tools and uti
 
 **Bleeding edge development is pushed to the main branch and may contain bugs. For the latest stable version, please use the latest release.**
 
---
 
 ## Features
 - **Logging**: Supports logging on Remal Shabakah boards via various protocols with multiple log levels and optional colored output: 
-    - Log Levels: 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'
+    - Log Levels: 
+        - 'DEBUG': Cyan
+        - 'INFO': Green
+        - 'WARNING': Yellow
+        - 'ERROR': Red
+        - 'FATAL': XXX
     - Protocols:
         - 'USB CDC'
         - 'UART'
@@ -19,12 +23,10 @@ The **Remal Common Utilities** library provides a set of essential tools and uti
 - **String Conversion Utilities**: Functions to convert integers and floating-point numbers to strings, with support for various bases and precision.
 - **Arduino OTA Support**: Wrapper functions for Arduino OTA updates, making it easier to implement OTA functionality in your projects.
 
--- 
 
 ## Supported Processors
 - **Espressif Systems ESP32** (Remal Shabakah v3.x, v4)
 
---
 
 ## Getting Started
 ### Installation
