@@ -8,16 +8,16 @@ The **Remal Common Utilities** library provides a set of essential tools and uti
 
 ## Features
 - **Logging**: Supports logging on Remal Shabakah boards via various protocols with multiple log levels and optional colored output: 
+    - Protocols:
+        - `USB CDC`: Default logging protocol, requires USB CDC to be enabled.
+        - `UART`: Logs messages over UART
+        - `Bluetooth Low Energy (BLE)`:  <-- Has some issues, use with caution. Will fix in future update.
     - Log Levels:
         - 🟦 `DEBUG`: Cyan
         - 🟩 `INFO`: Green  
         - 🟨 `WARNING`: Yellow  
         - 🟥 `ERROR`: Red  
         - ⬜🟥 `FATAL`: Red on White Background
-    - Protocols:
-        - `USB CDC`: Default logging protocol, requires USB CDC to be enabled.
-        - `UART`: Logs messages over UART
-        - `Bluetooth Low Energy (BLE)`:  <-- Has some issues, use with caution. Will fix in future update.
 - **Assert Handling**: Customizable assert function to handle errors with detailed file and line number reporting.
 - **Lightweight `printf()` Implementation**: Optimized for embedded systems, reducing overhead while maintaining functionality.
 - **String Conversion Utilities**: Functions to convert integers and floating-point numbers to strings, with support for various bases and precision.
