@@ -362,7 +362,7 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 			return;
 		}
 
-		/* Fatal is bold red */
+		/* Fatal is red on white bg */
 		if(ColorLogsEnabled)
 		{
 			ColorStr = ANSI_REDONWHITEBG;

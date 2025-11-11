@@ -81,7 +81,7 @@
 #define ANSI_BOLDCYAN      	"\x1B[96m"
 #define ANSI_BOLDWHITE     	"\x1B[97m"
 #define ANSI_WHITEONREDBG  	"\x1B[41;97m"
-#define ANSI_REDONWHITEBG  	"\x1B[47;31m"
+#define ANSI_REDONWHITEBG  	"\x1B[47;91m"
 
 
 /*********************************************
