@@ -83,9 +83,9 @@ void loop()
 - Updated log level colors to be bold and fatal log level to be red-on-white background
 - Added new ANSI color defines red-on-white background and white-on-red background: `ANSI_WHITEONREDBG` and `ANSI_REDONWHITEBG`
 - Updated README.md
-- Updated 'Assert_Example.ino' to use new logger initialization function
-- Removed usage of Arduino 'String' class in all examples and replaced with standard C++ 'string' class
-- Split 'Logger_FullDemo.ino' example into three separate examples: 'Logger_FullDemo_USB.ino', 'Logger_FullDemo_UART.ino', and 'Logger_FullDemo_BluetoothLE.ino' to demonstrate different logging protocols
+- Updated `Assert_Example.ino` to use new logger initialization function
+- Removed usage of Arduino `String` class in all examples and replaced with standard C++ `string` class
+- Split `Logger_FullDemo.ino` example into three separate examples: `Logger_FullDemo_USB.ino`, `Logger_FullDemo_UART.ino`, and `Logger_FullDemo_BluetoothLE.ino` to demonstrate different logging protocols
 
 ### v1.3:
 - Created new wrapper functions for the `Adafruit NeoPixel` library to make it simpler to init and use addressable LEDs
