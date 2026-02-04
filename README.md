@@ -11,7 +11,7 @@ The **Remal Common Utilities** library provides a set of essential tools and uti
     - Protocols:
         - `USB CDC`: Default logging protocol, requires USB CDC to be enabled.
         - `UART`: Logs messages over UART
-        - `Bluetooth Low Energy (BLE)`:  <-- Has some issues, use with caution. Will fix in future update.
+        - `Bluetooth Low Energy (BLE)`: Logs messages over BLE using the `Remal_BLE_Serial` library.
     - Log Levels:
         - 🟦 `DEBUG`: Cyan
         - 🟩 `INFO`: Green  
@@ -26,6 +26,12 @@ The **Remal Common Utilities** library provides a set of essential tools and uti
 
 ## Supported Processors
 - **Espressif Systems ESP32** (Remal Shabakah v3.x, v4)
+
+
+## Dependencies
+This library requires the following dependencies to be installed:
+- [Remal BLE Serial](https://github.com/remalhq/Remal_BLE_Serial) - Required for BLE logging functionality
+- [Adafruit NeoPixel](https://github.com/adafruit/Adafruit_NeoPixel) - Required for LED wrapper functions
 
 
 ## Getting Started
@@ -64,6 +70,13 @@ void loop()
 ```
 
 ## Changelog
+### v1.5:
+- Updated BLE logging to use the new `Remal_BLE_Serial` library API
+- Added BLE buffering support using `Begin_Buffer()` and `Flush_Buffer()` for more efficient BLE transmission
+- Removed usage of Arduino `String` class in OTA handler, replaced with `const char*`
+- Added `CurrentLogProtocol` tracking variable to track which logging protocol is active
+- Minor code cleanup and documentation updates
+
 ### v1.4:
 - Fixed bugs and edge cases in `RML_COMM_utoa()` and `RML_COMM_itoa()` and added proper error handling
 - Updated logging functions to use `const char*` which safely accept string literals and remove `-Wwrite-strings` warnings

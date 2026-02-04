@@ -1,10 +1,10 @@
 /**
  * @file 		Remal_CommonUtils.h
  * @author 		Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
- * @date 		Oct 29 2025 (Initial release - 14 May 2020)
- * @version		1.4
- * 
- * @brief   	This library provides various tools and utilities to be used 
+ * @date 		Feb 4 2026 (Initial release - 14 May 2020)
+ * @version		1.5
+ *
+ * @brief   	This library provides various tools and utilities to be used
  * 				on Remal hardware.
  *
  * @note		Refer to the README.md file for more information about this library.
@@ -189,7 +189,7 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Bau
  * @return
  * 			0 on success, -1 on failure
  ************************************************************************************************************************/
-int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, char* BT_Name);
+int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, const char* BT_Name);
 
 
 
@@ -528,7 +528,7 @@ void RML_COMM_HandleArduinoOTA();
  * 				Ex: Adafruit_NeoPixel Shbk_LED1(SHBK_NUM_LEDS, SHBK_LED_1_PIN, NEO_GRB + NEO_KHZ800); 
  * 
  * @param[in] Brightness
- * 			The brightness to set the LED at. Range 0 - 255 XXX CHECK WHAT 0 DOES IF SET IN INIT 
+ * 			The brightness to set the LED at. Range 0 - 255 
  * 
  * @return
  * 			None

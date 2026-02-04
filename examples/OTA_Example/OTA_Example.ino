@@ -1,13 +1,13 @@
 /**
  * @file      OTA_Example.ino
- * 
+ *
  * @author    Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
- * 
- * @date      Nov 10 2025
- * 
+ *
+ * @date      Feb 4 2026
+ *
  * @brief     Demonstrates how to enable OTA (Over-The-Air) firmware updates using the Remal CommonUtils library,
  *            while logging system status and messages over USB.
- * 
+ *
  * @note      You MUST select a partition scheme that supports OTA!
  *            In Arduino IDE: Tools → Partition Scheme → Keep the default or choose anything with OTA support.
  *            Without this, OTA updates will not work and uploads will fail.
@@ -72,10 +72,8 @@ void setup()
   
 void loop()
 {
-  /* Handle OTA updates - This must be called in the loop! Also note that the below function must be 
-   * called as frequently as possible to ensure OTA updates are handled properly. If calls are too slow,
-   * the watchdog will kick in and reset the board */
+  /* Handle OTA updates - This must be called in the loop to check for incoming OTA requests */
   RML_COMM_HandleArduinoOTA();
-   
-  delay(1000);   // When using OTA updates, the loop must be fast to avoid watchdog resets
+
+  delay(1000);
 }

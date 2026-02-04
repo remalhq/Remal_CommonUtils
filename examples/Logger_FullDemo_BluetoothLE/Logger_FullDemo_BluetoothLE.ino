@@ -1,15 +1,12 @@
 /**
  * @file      Logger_FullDemo_BluetoothLE.ino
- * 
+ *
  * @author    Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
- * 
- * @date      Nov 10 2025
- * 
- * @brief     An in-depth example demonstrating the usage of the Remal logger 
+ *
+ * @date      Feb 4 2026
+ *
+ * @brief     An in-depth example demonstrating the usage of the Remal logger
  *            using Bluetooth Low Energy (BLE) with various log levels and format specifiers.
- * 
- * @note      Bluetooth logging has some issues that we plan on addressing a future update, 
- *            use this example with caution.
 */
 #include "Remal_CommonUtils.h"
 

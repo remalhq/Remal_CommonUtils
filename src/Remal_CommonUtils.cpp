@@ -10,10 +10,12 @@
  * Private Variables
  *********************************************/
 static uint8_t Logger_InitDone = 0;					// This flag is set to true when RML_COMM_LoggerInit() is called and is successful. Used for error handling
-static const char DIGITS[] = "ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; 	// Used for itoa/utoa functions
+static LogProtocol_Enum CurrentLogProtocol = e_USB;	// Tracks selected logging protocol
 static SemaphoreHandle_t LogMutex = nullptr;		// Mutex to protect logging from multiple tasks
 static uint8_t ColorLogsEnabled = false;			// Flag to indicate if colored logs are enabled
 static BLESerial BT_Device;							// BLE Serial object for BLE logging
+static const char DIGITS[] = "ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; 	// Used for itoa/utoa functions
+
 
 /*********************************************
  * Function Pointers for logging backend
@@ -57,7 +59,7 @@ static inline void BLE_putc(char c)
     if (BT_Device.IsConnected())
     {
         char buf[2] = { c, '\0' };   		// make a valid null-terminated string
-        BT_Device.Send_Data(String(buf));
+        BT_Device.Send_Data(buf);
     }
 }
 
@@ -65,7 +67,7 @@ static inline void BLE_puts(const char* s)
 {
     if (s && BT_Device.IsConnected())
     {
-        BT_Device.Send_Data(String(s));   	// convert to Arduino String for BLESerial
+        BT_Device.Send_Data(s);
     }
 }
 
@@ -91,7 +93,7 @@ static uint8_t LogLevelsEnable[5] =
  * @brief Log Level strings:
  * Used when outputting log message
  *************************************************/
-char LogLevel_Str[5][10] =
+const char LogLevel_Str[5][10] =
 {
 	"DEBUG",
 	"INFO",
@@ -148,6 +150,7 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol)
 		
 	/* Logger was init successfully */
 	Logger_InitDone = 1;
+	CurrentLogProtocol = e_USB;
 
 	return 0;
 }
@@ -232,13 +235,14 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Bau
 		
 	/* Logger was init successfully */
 	Logger_InitDone = 1;
+	CurrentLogProtocol = e_UART;
 
 	return 0;
 }
 
 
 
-int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, char* BT_Name)
+int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, const char* BT_Name)
 {
 	/* Error check: 
 	 * Verify the LoggingProtocol is valid for the function */
@@ -283,6 +287,7 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, char* BT_Name)
 		
 	/* Logger was init successfully */
 	Logger_InitDone = 1;
+	CurrentLogProtocol = e_BLE;
 
 	return 0;
 }
@@ -379,6 +384,12 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 		xSemaphoreTake(LogMutex, portMAX_DELAY);
 	}
 
+	/* If using BLE, begin buffering */
+	if (CurrentLogProtocol == e_BLE)
+	{
+		BT_Device.Begin_Buffer();
+	}
+
 	/* The log message is sent by segments depending on
 	 * what needs to be sent or formatting */
 	Main_puts(ColorStr);					//Color string
@@ -412,6 +423,12 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 		Main_puts(ANSI_RESET);
 	}
 	Main_puts("\r\n");
+
+	/* If using BLE, flush the buffer */
+	if (CurrentLogProtocol == e_BLE)
+	{
+		BT_Device.Flush_Buffer();
+	}
 
 	if (LogMutex)
 	{
@@ -535,12 +552,24 @@ void RML_COMM_printf( const char * InputStr, ... )
 		xSemaphoreTake(LogMutex, portMAX_DELAY);
 	}
 
+	/* If using BLE, begin buffering */
+	if (CurrentLogProtocol == e_BLE)
+	{
+		BT_Device.Begin_Buffer();
+	}
+
 	va_list VaList;							// Declare Variable-length argument list to store any additional args
 	va_start(VaList, InputStr);				// Create a list for arguments given after 'InputStr'
 
 	RML_COMM_vprintf(InputStr, VaList);		// Call the vprintf function to handle the rest
 
 	va_end(VaList);							// Clean up the list
+
+	/* If using BLE, flush the buffer */
+	if (CurrentLogProtocol == e_BLE)
+	{
+		BT_Device.Flush_Buffer();
+	}
 	
 	if (LogMutex)
 	{
@@ -951,21 +980,21 @@ void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 	/* Setup OTA handlers */
 	ArduinoOTA.onStart([]()
 	{
-		String type;
+		const char* type;
 
 		/* Check if the update is for the sketch or SPIFFS */
-		if (ArduinoOTA.getCommand() == U_FLASH) 
+		if (ArduinoOTA.getCommand() == U_FLASH)
 		{
 			type = "sketch";
-		} 
-		else 
+		}
+		else
 		{ // U_SPIFFS
 			type = "filesystem";
 
 			/* NOTE: If updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end() */
 		}
-		
-		RML_COMM_LogMsg(FuncName, e_INFO, "Start updating %s", type.c_str());
+
+		RML_COMM_LogMsg(FuncName, e_INFO, "Start updating %s", type);
 	});
 
 	ArduinoOTA.onEnd([]()
@@ -973,7 +1002,7 @@ void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 		RML_COMM_LogMsg(FuncName, e_INFO, "End");
 	});
 
-	ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) 
+	ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
 	{
 		// Clamp: if progress > total (shouldn't happen, but be safe) use total
 		const uint32_t capped = (total && progress > total) ? total : progress;
@@ -982,30 +1011,38 @@ void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 		RML_COMM_LogMsg(FuncName, e_INFO, "Progress: %u%%", pct);
 	});
 	
-	ArduinoOTA.onError([](ota_error_t error) 
+	ArduinoOTA.onError([](ota_error_t error)
 	{
-		RML_COMM_LogMsg(FuncName, e_ERROR, "Error[%u]: ", error);
+		const char* errorMsg;
 
-		if (error == OTA_AUTH_ERROR)
+		switch (error)
 		{
-			RML_COMM_LogMsg(FuncName, e_ERROR, "Auth Failed");
-		} 
-		else if (error == OTA_BEGIN_ERROR) 
-		{
-			RML_COMM_LogMsg(FuncName, e_ERROR, "Begin Failed");
-		} 
-		else if (error == OTA_CONNECT_ERROR) 
-		{
-			RML_COMM_LogMsg(FuncName, e_ERROR, "Connect Failed");
-		} 
-		else if (error == OTA_RECEIVE_ERROR) 
-		{
-			RML_COMM_LogMsg(FuncName, e_ERROR, "Receive Failed");
-		} 
-		else if (error == OTA_END_ERROR) 
-		{
-			RML_COMM_LogMsg(FuncName, e_ERROR, "End Failed");
+			case OTA_AUTH_ERROR:
+				errorMsg = "Auth Failed";
+				break;
+			
+			case OTA_BEGIN_ERROR:
+				errorMsg = "Begin Failed";
+				break;
+
+			case OTA_CONNECT_ERROR:
+				errorMsg = "Connect Failed";
+				break;
+
+			case OTA_RECEIVE_ERROR:
+				errorMsg = "Receive Failed";
+				break;
+
+			case OTA_END_ERROR:
+				errorMsg = "End Failed";
+				break;
+
+			default:
+				errorMsg = "Unknown Error";
+				break;
 		}
+
+		RML_COMM_LogMsg(FuncName, e_ERROR, "OTA Error[%u]: %s", error, errorMsg);
 	});
 
 	ArduinoOTA.begin();
@@ -1033,7 +1070,7 @@ void RML_COMM_LED_Init(Adafruit_NeoPixel &LED_Obj, uint8_t Brightness)
 
 int8_t RML_COMM_LED_SetLEDColor(Adafruit_NeoPixel &LED_Obj, uint8_t Red, uint8_t Green, uint8_t Blue)
 {
-	/// Get the number of LEDs
+	// Get the number of LEDs
 	uint16_t NumLEDs = LED_Obj.numPixels();
 
 	// Error check: Make sure the number of LEDs is valid

@@ -5,11 +5,37 @@
 #######################################
 # Datatypes (KEYWORD1)
 #######################################
+LogLevel_Enum	KEYWORD1
+LogProtocol_Enum	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
 #######################################
+RML_COMM_LoggerInit	KEYWORD2
+RML_COMM_LogMsg	KEYWORD2
+RML_COMM_LogLevelSet	KEYWORD2
+RML_COMM_EnableColorLogs	KEYWORD2
+RML_COMM_LogStackUsage	KEYWORD2
+RML_COMM_printf	KEYWORD2
+RML_COMM_vprintf	KEYWORD2
+RML_COMM_utoa	KEYWORD2
+RML_COMM_itoa	KEYWORD2
+RML_COMM_ftoa	KEYWORD2
+RML_COMM_ReverseString	KEYWORD2
+RML_COMM_SetupArduinoOTA	KEYWORD2
+RML_COMM_HandleArduinoOTA	KEYWORD2
+RML_COMM_LED_Init	KEYWORD2
+RML_COMM_LED_SetLEDColor	KEYWORD2
+RML_ASSERT	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
 #######################################
+e_DEBUG	LITERAL1
+e_INFO	LITERAL1
+e_WARNING	LITERAL1
+e_ERROR	LITERAL1
+e_FATAL	LITERAL1
+e_USB	LITERAL1
+e_UART	LITERAL1
+e_BLE	LITERAL1
