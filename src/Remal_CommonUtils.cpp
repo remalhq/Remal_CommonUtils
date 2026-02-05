@@ -1,5 +1,5 @@
 /*
- * Remal_CommonUtils.c
+ * Remal_CommonUtils.cpp
  *
  *  # ALL INFO CAN BE FOUND IN THE HEADER FILE #
  */
@@ -9,12 +9,26 @@
 /*********************************************
  * Private Variables
  *********************************************/
-static uint8_t Logger_InitDone = 0;					// This flag is set to true when RML_COMM_LoggerInit() is called and is successful. Used for error handling
+static uint8_t Logger_InitDone = 0;					// This flag is set to true when RML_COMM_Logger_Init() is called and is successful. Used for error handling
 static LogProtocol_Enum CurrentLogProtocol = e_USB;	// Tracks selected logging protocol
 static SemaphoreHandle_t LogMutex = nullptr;		// Mutex to protect logging from multiple tasks
 static uint8_t ColorLogsEnabled = false;			// Flag to indicate if colored logs are enabled
 static BLESerial BT_Device;							// BLE Serial object for BLE logging
 static const char DIGITS[] = "ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; 	// Used for itoa/utoa functions
+
+
+/*********************************************
+ * Assert Callback
+ *********************************************/
+static AssertCallback_t UserAssertCallback = nullptr;	// User-defined callback for assert failures
+
+
+/*********************************************
+ * WiFi Credentials Storage
+ *********************************************/
+static char StoredSSID[33] = {0};				// Max SSID length is 32 + null
+static char StoredPassword[65] = {0};			// Max password length is 64 + null
+static uint32_t StoredTimeout = 10000;			// Default 10 seconds
 
 
 /*********************************************
@@ -34,22 +48,22 @@ static inline void USB_puts(const char* s)
 {
 	if (s)
 	{
-		Serial.write((const uint8_t*)s, strlen(s)); 
+		Serial.write((const uint8_t*)s, strlen(s));
 	}
 }
 
 // --- UART backend (ESP-IDF driver) ---
 static uart_port_t SelectedUARTPort = UART_NUM_0;			// Used to store the selected UART port for logging, defaults to UART_NUM_0
 static inline void UART_putc(char c)
-{ 
-	uart_write_bytes(SelectedUARTPort, &c, 1); 
+{
+	uart_write_bytes(SelectedUARTPort, &c, 1);
 }
 
 static inline void UART_puts(const char* s)
-{ 
+{
 	if (s)
 	{
-		uart_write_bytes(SelectedUARTPort, s, strlen(s)); 
+		uart_write_bytes(SelectedUARTPort, s, strlen(s));
 	}
 }
 
@@ -76,11 +90,11 @@ static inline void BLE_puts(const char* s)
 /*************************************************
  * @brief Log Levels to log:
  * By default, all log messages are enabled.
- *  
- * Use RML_COMM_LogLevelSet() function to enable
+ *
+ * Use RML_COMM_Logger_SetLevel() function to enable
  * or disable specific log level messages
  *************************************************/
-static uint8_t LogLevelsEnable[5] = 
+static uint8_t LogLevelsEnable[5] =
 {
 	1,		//0- Log "Debug" messages
 	1,		//1- Log "Info" messages
@@ -106,17 +120,17 @@ const char LogLevel_Str[5][10] =
 
 
 
-int8_t RML_COMM_LoggerInit()
+int8_t RML_COMM_Logger_Init()
 {
 	/* Default to USB logging */
-	return RML_COMM_LoggerInit(e_USB);
+	return RML_COMM_Logger_Init(e_USB);
 }
 
 
 
-int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol)
+int8_t RML_COMM_Logger_Init(uint8_t LoggingProtocol)
 {
-	/* Error check: 
+	/* Error check:
 	* Verify the LoggingProtocol is valid for the function */
 	if( LoggingProtocol != e_USB )
 	{
@@ -130,14 +144,14 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol)
 		return 0;		//Logger was already init, return success
 	}
 
-	/* 
-	 * USB Logging was selected: 
+	/*
+	 * USB Logging was selected:
 	 */
 	Serial.begin();							// Native USB does not use baud rate
-	Serial.setTxTimeoutMs(0);				// This is used to avoid waiting if the USB is not connected 
+	Serial.setTxTimeoutMs(0);				// This is used to avoid waiting if the USB is not connected
 
-	/* 
-	 * Set function pointers for logging backend: 
+	/*
+	 * Set function pointers for logging backend:
 	 */
 	Main_putc = &USB_putc;
 	Main_puts = &USB_puts;
@@ -147,7 +161,7 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol)
 	{
 		LogMutex = xSemaphoreCreateMutex();
 	}
-		
+
 	/* Logger was init successfully */
 	Logger_InitDone = 1;
 	CurrentLogProtocol = e_USB;
@@ -157,9 +171,9 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol)
 
 
 
-int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Baudrate, uart_port_t UART_Num)
+int8_t RML_COMM_Logger_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Baudrate, uart_port_t UART_Num)
 {
-	/* Error check: 
+	/* Error check:
 	 * Verify the LoggingProtocol is valid for the function */
 	if( LoggingProtocol != e_UART )
 	{
@@ -173,7 +187,7 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Bau
 		return 0;		//Logger was already init, return success
 	}
 
-	/* Error check: 
+	/* Error check:
 	 * Baudrate set to 0 */
 	if( Baudrate == 0 )
 	{
@@ -186,9 +200,9 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Bau
 	{
 		return -1;
 	}
-	
-	/* 
-	 * UART Logging was selected: 
+
+	/*
+	 * UART Logging was selected:
 	 */
   	// Configure UART parameters
   	const uart_config_t UARTConfig =
@@ -221,8 +235,8 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Bau
 
 	SelectedUARTPort = UART_Num;			// Store the selected UART port for logging
 
-	/* 
-	 * Set function pointers for logging backend: 
+	/*
+	 * Set function pointers for logging backend:
 	 */
 	Main_putc = &UART_putc;
 	Main_puts = &UART_puts;
@@ -232,7 +246,7 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Bau
 	{
 		LogMutex = xSemaphoreCreateMutex();
 	}
-		
+
 	/* Logger was init successfully */
 	Logger_InitDone = 1;
 	CurrentLogProtocol = e_UART;
@@ -242,9 +256,9 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Bau
 
 
 
-int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, const char* BT_Name)
+int8_t RML_COMM_Logger_Init(uint8_t LoggingProtocol, const char* BT_Name)
 {
-	/* Error check: 
+	/* Error check:
 	 * Verify the LoggingProtocol is valid for the function */
 	if( LoggingProtocol != e_BLE )
 	{
@@ -258,33 +272,33 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, const char* BT_Name)
 		return 0;		//Logger was already init, return success
 	}
 
-	/* Error check: 
+	/* Error check:
 	 * BT_Name is null or length 0 */
 	if( BT_Name == nullptr || strlen(BT_Name) == 0 )
 	{
 		return -1;
 	}
-	
-	/* 
-	 * BT Logging was selected: 
+
+	/*
+	 * BT Logging was selected:
 	 */
 	BT_Device.Init(BT_Name);
 
-	/* 
-	 * Set function pointers for logging backend: 
+	/*
+	 * Set function pointers for logging backend:
 	 */
 	Main_putc = &BLE_putc;
 	Main_puts = &BLE_puts;
 
 	/* Disable colored logs for BT */
-	RML_COMM_EnableColorLogs(0);
+	RML_COMM_Logger_EnableColor(0);
 
 	/* Create mutex */
 	if (LogMutex == NULL)
 	{
 		LogMutex = xSemaphoreCreateMutex();
 	}
-		
+
 	/* Logger was init successfully */
 	Logger_InitDone = 1;
 	CurrentLogProtocol = e_BLE;
@@ -294,7 +308,7 @@ int8_t RML_COMM_LoggerInit(uint8_t LoggingProtocol, const char* BT_Name)
 
 
 
-void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
+void RML_COMM_Logger_Msg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
@@ -356,7 +370,7 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 		/* Error is red */
 		if(ColorLogsEnabled)
 		{
-		
+
 			ColorStr = ANSI_BOLDRED;
 		}
 	}
@@ -405,7 +419,7 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 		Main_puts(LogLevel_Str[LogLvl]);	//LogLevel
 	}
 	Main_puts("] ");
-	
+
 
 	/* Logs source of log (inception) */
 	Main_puts(Src);
@@ -438,7 +452,7 @@ void RML_COMM_LogMsg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 
 
 
-int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable)
+int8_t RML_COMM_Logger_SetLevel(uint8_t LogLvl, uint8_t Enable)
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
@@ -451,7 +465,7 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable)
 	{
 		Enable = 1;
 	}
-	
+
 	/* Check if Log level is defined to be logged: */
 	if(LogLvl == e_DEBUG)
 	{
@@ -484,7 +498,7 @@ int8_t RML_COMM_LogLevelSet(uint8_t LogLvl, uint8_t Enable)
 
 
 
-void RML_COMM_EnableColorLogs(uint8_t Enable)
+void RML_COMM_Logger_EnableColor(uint8_t Enable)
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
@@ -504,14 +518,14 @@ void RML_COMM_EnableColorLogs(uint8_t Enable)
 
 
 
-int8_t RML_COMM_LogStackUsage(UBaseType_t TaskStackSize)
+int8_t RML_COMM_Debug_LogStackUsage(UBaseType_t TaskStackSize)
 {
 	/* Error check: Stack size is valid */
 	if(TaskStackSize <= 0)
 	{
 		return -1;
 	}
-	
+
 	UBaseType_t StackFreeWords = uxTaskGetStackHighWaterMark(NULL);
 
 	// Calculate remaining free stack in bytes
@@ -525,12 +539,12 @@ int8_t RML_COMM_LogStackUsage(UBaseType_t TaskStackSize)
 	float StackUsedPercent = 100.0f - StackFreePercent;
 
 	// Log usage
-	RML_COMM_LogMsg(pcTaskGetTaskName(NULL),
-					e_DEBUG, 
-					"Stack usage: %.2f%% used, %.2f%% free (%u bytes free of %u bytes total)", 
-					StackUsedPercent, 
-					StackFreePercent, 
-					StackFreeBytes, 
+	RML_COMM_Logger_Msg(pcTaskGetTaskName(NULL),
+					e_DEBUG,
+					"Stack usage: %.2f%% used, %.2f%% free (%u bytes free of %u bytes total)",
+					StackUsedPercent,
+					StackFreePercent,
+					StackFreeBytes,
 					TotalStackBytes
 					);
 
@@ -546,7 +560,7 @@ void RML_COMM_printf( const char * InputStr, ... )
 	{
 		return;
 	}
-	
+
 	if (LogMutex)
 	{
 		xSemaphoreTake(LogMutex, portMAX_DELAY);
@@ -570,7 +584,7 @@ void RML_COMM_printf( const char * InputStr, ... )
 	{
 		BT_Device.Flush_Buffer();
 	}
-	
+
 	if (LogMutex)
 	{
 		xSemaphoreGive(LogMutex);
@@ -586,7 +600,7 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 	{
 		return;
 	}
-	
+
 	char *StringArg;			//Will be used to store any string args
 	char CharArg; 				//Will be used to store any char args
 	uint32_t UnsignedArg;		//Will be used to store any unsigned args
@@ -623,7 +637,7 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 				//Unsigned int
 				case 'u':
 					UnsignedArg = va_arg(VaList, uint32_t);										//Get the arg, type unsigned
-					RML_COMM_utoa(UnsignedArg, IntStr, sizeof(IntStr), 10);						//Convert unsigned int to ascii, base 10
+					RML_COMM_String_utoa(UnsignedArg, IntStr, sizeof(IntStr), 10);				//Convert unsigned int to ascii, base 10
 					Main_puts(IntStr);															//Print string
 					InputStr++;																	//Increment to remove the specifier from printing
 					break;
@@ -632,7 +646,7 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 				case 'i':
 				case 'd':
 					SignedArg = va_arg(VaList, int32_t);										//Get the arg, type signed
-					RML_COMM_itoa(SignedArg, IntStr, sizeof(IntStr), 10);						//Convert signed int to ascii, base 10
+					RML_COMM_String_itoa(SignedArg, IntStr, sizeof(IntStr), 10);				//Convert signed int to ascii, base 10
 					Main_puts(IntStr); 															//Print string
 					InputStr++;																	//Increment to remove the specifier from printing
 					break;
@@ -647,15 +661,15 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 				case 'X':
 				case 'x':
 					UnsignedArg = va_arg(VaList, uint32_t);										//Get the arg, type unsigned
-					RML_COMM_utoa(UnsignedArg, IntStr, sizeof(IntStr), 16);						//Convert unsigned int to ascii, base 16
+					RML_COMM_String_utoa(UnsignedArg, IntStr, sizeof(IntStr), 16);				//Convert unsigned int to ascii, base 16
 					Main_puts(IntStr);															//Print string
 					InputStr++;
 					break;
 
-				//User wants to set the number of decimal places for the float/double 
+				//User wants to set the number of decimal places for the float/double
 				case '.':
 					InputStr++;																	//Get the next value which should be between 1-6
-					
+
 					Decimals = 0;
 
 					// Handle two-digit precision (e.g., .10 to .15)
@@ -668,7 +682,7 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 							Decimals = (Decimals * 10) + ((*InputStr++) - '0');					//Get the second digit
 						}
 					}
-					
+
 					// Limit decimals to a maximum of 15
 					if (Decimals > 15)
 					{
@@ -682,7 +696,7 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 					if (*InputStr == 'f')
 					{
 						DoubleArg = va_arg(VaList, double);
-						RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), Decimals);
+						RML_COMM_String_ftoa(DoubleArg, IntStr, sizeof(IntStr), Decimals);
 						Main_puts(IntStr);
 						InputStr++; // move past 'f'
 					}
@@ -699,7 +713,7 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 				//Double/float value with no specified decimal places
 				case 'f':
 					DoubleArg = va_arg(VaList, double);											//Get the arg, type double
-					RML_COMM_ftoa(DoubleArg, IntStr, sizeof(IntStr), 2);						//Convert float/double to ascii, 2 decimal places by default
+					RML_COMM_String_ftoa(DoubleArg, IntStr, sizeof(IntStr), 2);					//Convert float/double to ascii, 2 decimal places by default
 					Main_puts(IntStr);															//Print string
 					InputStr++;
 					break;
@@ -727,7 +741,7 @@ void RML_COMM_vprintf( const char * InputStr, va_list VaList )
 
 
 
-int32_t RML_COMM_utoa(uint32_t v, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Base)
+int32_t RML_COMM_String_utoa(uint32_t v, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Base)
 {
 	/* Error check: ResultBuff is NULL */
 	if( ResultBuff == NULL )
@@ -753,7 +767,7 @@ int32_t RML_COMM_utoa(uint32_t v, char* ResultBuff, uint32_t ResultBuff_Size, ui
     do
 	{
 		if (len + 1 >= ResultBuff_Size)
-		{ 
+		{
 			ResultBuff[0] = '\0';
 			return -1;
 		}
@@ -766,8 +780,8 @@ int32_t RML_COMM_utoa(uint32_t v, char* ResultBuff, uint32_t ResultBuff_Size, ui
     /* Reverse in-place */
     for (uint32_t i = 0, j = len - 1; i < j; ++i, --j)
 	{
-        char t = ResultBuff[i]; 
-		ResultBuff[i] = ResultBuff[j]; 
+        char t = ResultBuff[i];
+		ResultBuff[i] = ResultBuff[j];
 		ResultBuff[j] = t;
     }
 
@@ -777,7 +791,7 @@ int32_t RML_COMM_utoa(uint32_t v, char* ResultBuff, uint32_t ResultBuff_Size, ui
 
 
 
-int32_t RML_COMM_itoa(int32_t Value, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Base)
+int32_t RML_COMM_String_itoa(int32_t Value, char* ResultBuff, uint32_t ResultBuff_Size, uint8_t Base)
 {
 	/* Error check: ResultBuff is NULL */
 	if( ResultBuff == NULL )
@@ -801,11 +815,11 @@ int32_t RML_COMM_itoa(int32_t Value, char* ResultBuff, uint32_t ResultBuff_Size,
     int32_t v = Value;
 
     /* Build in reverse with strict bounds checking (always keep room for '\0') */
-    do 
+    do
 	{
         if (len + 1 >= ResultBuff_Size)
-		{ 
-			ResultBuff[0] = '\0'; 
+		{
+			ResultBuff[0] = '\0';
 			return -1;
 		}
         int32_t q = v / (int32_t)Base;           /* truncates toward zero */
@@ -818,8 +832,8 @@ int32_t RML_COMM_itoa(int32_t Value, char* ResultBuff, uint32_t ResultBuff_Size,
     if (Value < 0 && Base == 10)
 	{
         if (len + 1 >= ResultBuff_Size)
-		{ 
-			ResultBuff[0] = '\0'; 
+		{
+			ResultBuff[0] = '\0';
 			return -1;
 		}
         ResultBuff[len++] = '-';
@@ -828,8 +842,8 @@ int32_t RML_COMM_itoa(int32_t Value, char* ResultBuff, uint32_t ResultBuff_Size,
     /* Reverse in-place */
     for (uint32_t i = 0, j = len - 1; i < j; ++i, --j)
 	{
-        char t = ResultBuff[i]; 
-		ResultBuff[i] = ResultBuff[j]; 
+        char t = ResultBuff[i];
+		ResultBuff[i] = ResultBuff[j];
 		ResultBuff[j] = t;
     }
 
@@ -841,7 +855,7 @@ int32_t RML_COMM_itoa(int32_t Value, char* ResultBuff, uint32_t ResultBuff_Size,
 
 
 
-void RML_COMM_ReverseString(char* Str, uint32_t Length)
+void RML_COMM_String_Reverse(char* Str, uint32_t Length)
 {
 	uint32_t i, j;
 	char temp;
@@ -856,7 +870,7 @@ void RML_COMM_ReverseString(char* Str, uint32_t Length)
 
 
 
-int32_t RML_COMM_ftoa(double Value, char* ResultBuff, uint32_t BuffSize, uint8_t Afterpoint)
+int32_t RML_COMM_String_ftoa(double Value, char* ResultBuff, uint32_t BuffSize, uint8_t Afterpoint)
 {
 	int32_t WholePart = (int32_t)Value;
 	double FractionalPart = Value - WholePart;
@@ -942,16 +956,26 @@ int32_t RML_COMM_ftoa(double Value, char* ResultBuff, uint32_t BuffSize, uint8_t
 
 
 
-void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber)
+void RML_COMM_Assert_SetCallback(AssertCallback_t Callback)
 {
-	// char FileNameStr[20] = {0};
-	// snprintf(FileNameStr, 20, "%s", FileName);
-	
-	/* 
+	UserAssertCallback = Callback;
+}
+
+
+
+void _RML_COMM_Assert_Handler(const char* FileName, uint32_t LineNumber, const char* Expression)
+{
+	/*
 	 * Assertion failed, log info
 	 */
-	RML_COMM_LogMsg("RML_ASSERT", e_FATAL, "ASSERTION FAILED:\r\n\t--> File: %s\r\n\t--> Line: %u", FileName, LineNumber);
-	
+	RML_COMM_Logger_Msg("RML_ASSERT", e_FATAL, "ASSERTION FAILED:\r\n\t--> File: %s\r\n\t--> Line: %u\r\n\t--> Expr: %s", FileName, LineNumber, Expression);
+
+	/* Call user callback if registered */
+	if (UserAssertCallback != nullptr)
+	{
+		UserAssertCallback(FileName, LineNumber, Expression);
+	}
+
 	while(1)
 	{
 		vTaskDelay(portMAX_DELAY);
@@ -961,9 +985,105 @@ void _RML_COMM_Assert(const char* FileName, uint32_t LineNumber)
 
 
 
-void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
+int8_t RML_COMM_WiFi_Connect(const char* SSID, const char* Password, uint32_t TimeoutMs)
 {
-	static const char FuncName[] = "RML_COMM_SetupArduinoOTA";
+	static const char FuncName[] = "RML_COMM_WiFi_Connect";
+
+	/* Error check: SSID is not null or empty */
+	if (SSID == nullptr || strlen(SSID) == 0)
+	{
+		RML_COMM_Logger_Msg(FuncName, e_ERROR, "SSID is null or empty");
+		return -1;
+	}
+
+	/* Store credentials for reconnect */
+	strncpy(StoredSSID, SSID, sizeof(StoredSSID) - 1);
+	StoredSSID[sizeof(StoredSSID) - 1] = '\0';
+
+	if (Password != nullptr)
+	{
+		strncpy(StoredPassword, Password, sizeof(StoredPassword) - 1);
+		StoredPassword[sizeof(StoredPassword) - 1] = '\0';
+	}
+	else
+	{
+		StoredPassword[0] = '\0';
+	}
+
+	StoredTimeout = TimeoutMs;
+
+	RML_COMM_Logger_Msg(FuncName, e_INFO, "Connecting to %s...", SSID);
+
+	WiFi.begin(SSID, Password);
+
+	uint32_t startTime = millis();
+	while (WiFi.status() != WL_CONNECTED)
+	{
+		if (millis() - startTime >= TimeoutMs)
+		{
+			RML_COMM_Logger_Msg(FuncName, e_ERROR, "Connection timeout after %u ms", TimeoutMs);
+			return -1;
+		}
+		delay(100);
+	}
+
+	RML_COMM_Logger_Msg(FuncName, e_INFO, "Connected! IP: %s", WiFi.localIP().toString().c_str());
+	return 0;
+}
+
+
+
+int8_t RML_COMM_WiFi_Reconnect()
+{
+	static const char FuncName[] = "RML_COMM_WiFi_Reconnect";
+
+	if (StoredSSID[0] == '\0')
+	{
+		RML_COMM_Logger_Msg(FuncName, e_ERROR, "No stored credentials - call RML_COMM_WiFi_Connect first");
+		return -1;
+	}
+
+	RML_COMM_Logger_Msg(FuncName, e_INFO, "Reconnecting to %s...", StoredSSID);
+
+	WiFi.begin(StoredSSID, StoredPassword);
+
+	uint32_t startTime = millis();
+	while (WiFi.status() != WL_CONNECTED)
+	{
+		if (millis() - startTime >= StoredTimeout)
+		{
+			RML_COMM_Logger_Msg(FuncName, e_ERROR, "Reconnection timeout");
+			return -1;
+		}
+		delay(100);
+	}
+
+	RML_COMM_Logger_Msg(FuncName, e_INFO, "Reconnected! IP: %s", WiFi.localIP().toString().c_str());
+	return 0;
+}
+
+
+
+void RML_COMM_WiFi_Disconnect()
+{
+	static const char FuncName[] = "RML_COMM_WiFi_Disconnect";
+	WiFi.disconnect();
+	RML_COMM_Logger_Msg(FuncName, e_INFO, "Disconnected from WiFi");
+}
+
+
+
+bool RML_COMM_WiFi_IsConnected()
+{
+	return (WiFi.status() == WL_CONNECTED);
+}
+
+
+
+
+void RML_COMM_OTA_Setup(const char* Hostname, const char* Password)
+{
+	static const char FuncName[] = "RML_COMM_OTA_Setup";
 
 	/* Check if hostname is given */
 	if (Hostname != NULL)
@@ -994,12 +1114,12 @@ void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 			/* NOTE: If updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end() */
 		}
 
-		RML_COMM_LogMsg(FuncName, e_INFO, "Start updating %s", type);
+		RML_COMM_Logger_Msg(FuncName, e_INFO, "Start updating %s", type);
 	});
 
 	ArduinoOTA.onEnd([]()
 	{
-		RML_COMM_LogMsg(FuncName, e_INFO, "End");
+		RML_COMM_Logger_Msg(FuncName, e_INFO, "End");
 	});
 
 	ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
@@ -1008,9 +1128,9 @@ void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 		const uint32_t capped = (total && progress > total) ? total : progress;
 		// Guard + 64-bit math: If total==0 → pct=0; else pct = floor((capped*100) / total) with 64-bit multiply
 		const uint32_t pct = total ? (uint32_t)(((uint64_t)capped * 100u) / (uint64_t)total) : 0u;
-		RML_COMM_LogMsg(FuncName, e_INFO, "Progress: %u%%", pct);
+		RML_COMM_Logger_Msg(FuncName, e_INFO, "Progress: %u%%", pct);
 	});
-	
+
 	ArduinoOTA.onError([](ota_error_t error)
 	{
 		const char* errorMsg;
@@ -1020,7 +1140,7 @@ void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 			case OTA_AUTH_ERROR:
 				errorMsg = "Auth Failed";
 				break;
-			
+
 			case OTA_BEGIN_ERROR:
 				errorMsg = "Begin Failed";
 				break;
@@ -1042,7 +1162,7 @@ void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 				break;
 		}
 
-		RML_COMM_LogMsg(FuncName, e_ERROR, "OTA Error[%u]: %s", error, errorMsg);
+		RML_COMM_Logger_Msg(FuncName, e_ERROR, "OTA Error[%u]: %s", error, errorMsg);
 	});
 
 	ArduinoOTA.begin();
@@ -1050,7 +1170,7 @@ void RML_COMM_SetupArduinoOTA(const char* Hostname, const char* Password)
 
 
 
-void RML_COMM_HandleArduinoOTA()
+void RML_COMM_OTA_Handle()
 {
 	/* Handle OTA updates */
 	ArduinoOTA.handle();
@@ -1068,7 +1188,7 @@ void RML_COMM_LED_Init(Adafruit_NeoPixel &LED_Obj, uint8_t Brightness)
 
 
 
-int8_t RML_COMM_LED_SetLEDColor(Adafruit_NeoPixel &LED_Obj, uint8_t Red, uint8_t Green, uint8_t Blue)
+int8_t RML_COMM_LED_SetColor(Adafruit_NeoPixel &LED_Obj, uint8_t Red, uint8_t Green, uint8_t Blue)
 {
 	// Get the number of LEDs
 	uint16_t NumLEDs = LED_Obj.numPixels();

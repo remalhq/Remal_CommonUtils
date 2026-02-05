@@ -1,10 +1,10 @@
 /**
  * @file      Logger_SimpleDemo.ino
- * 
+ *
  * @author    Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
- * 
- * @date      Nov 10 2025
- * 
+ *
+ * @date      Feb 4 2026
+ *
  * @brief     A simple example demonstrating the usage of the Remal logger using USB.
 */
 #include "Remal_CommonUtils.h"
@@ -13,51 +13,51 @@
 int MessageDelay_ms = 2000;         // Delay between log messages in milliseconds
 
 
-void setup() 
+void setup()
 {
 	/* Initialize the logger using USB (By default all log levels enabled) */
-	RML_COMM_LoggerInit(e_USB);
+	RML_COMM_Logger_Init(e_USB);
 }
 
 
-void loop() 
+void loop()
 {
 	delay(MessageDelay_ms);
-	RML_COMM_LogMsg("loop", e_DEBUG, "Hello World! This is a debug message");
+	RML_COMM_Logger_Msg("Loop", e_DEBUG, "Hello World! This is a debug message");
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_INFO, "and this is an info message");
+	RML_COMM_Logger_Msg("Loop", e_INFO, "and this is an info message");
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_WARNING, "and this is a warning message");
+	RML_COMM_Logger_Msg("Loop", e_WARNING, "and this is a warning message");
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_ERROR, "and this is an error message");
+	RML_COMM_Logger_Msg("Loop", e_ERROR, "and this is an error message");
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_FATAL, "and this is a fatal message");
+	RML_COMM_Logger_Msg("Loop", e_FATAL, "and this is a fatal message");
 	delay(MessageDelay_ms);
 
 	// Use the logger to print variables
 	int Number = 42;
-	RML_COMM_LogMsg("loop", e_DEBUG, "You can also print variables, like this: %d", Number);
+	RML_COMM_Logger_Msg("Loop", e_DEBUG, "You can also print variables, like this: %d", Number);
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_DEBUG, "It's very similar to printf(), however, it has different features");
+	RML_COMM_Logger_Msg("Loop", e_DEBUG, "It's very similar to printf(), however, it has different features");
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_DEBUG, "Check the Logger_FullDemo example to see all the features of the logger");
+	RML_COMM_Logger_Msg("Loop", e_DEBUG, "Check the Logger_FullDemo example to see all the features of the logger");
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_DEBUG, "The logger is very useful for debugging and monitoring your code");
+	RML_COMM_Logger_Msg("Loop", e_DEBUG, "The logger is very useful for debugging and monitoring your code");
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_DEBUG, "It's also very useful for logging data and events");
+	RML_COMM_Logger_Msg("Loop", e_DEBUG, "It's also very useful for logging data and events");
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_DEBUG, "We designed the logger to be easy and powerful to use");
+	RML_COMM_Logger_Msg("Loop", e_DEBUG, "We designed the logger to be easy and powerful to use");
 	delay(MessageDelay_ms);
 
-	RML_COMM_LogMsg("loop", e_DEBUG, "Good luck with your projects! The demo will now repeat\n\n");
+	RML_COMM_Logger_Msg("Loop", e_DEBUG, "Good luck with your projects! The demo will now repeat\n\n");
 	delay(MessageDelay_ms);
 }
