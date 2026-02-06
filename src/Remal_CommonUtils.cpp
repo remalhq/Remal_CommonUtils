@@ -9,7 +9,7 @@
 /*********************************************
  * Private Variables
  *********************************************/
-static uint8_t Logger_InitDone = 0;					// This flag is set to true when RML_COMM_Logger_Init() is called and is successful. Used for error handling
+static uint8_t Logger_InitDone = 0;					// This flag is set to true when RML_COMM_Log_Init() is called and is successful. Used for error handling
 static LogProtocol_Enum CurrentLogProtocol = e_USB;	// Tracks selected logging protocol
 static SemaphoreHandle_t LogMutex = nullptr;		// Mutex to protect logging from multiple tasks
 static uint8_t ColorLogsEnabled = false;			// Flag to indicate if colored logs are enabled
@@ -24,11 +24,25 @@ static AssertCallback_t UserAssertCallback = nullptr;	// User-defined callback f
 
 
 /*********************************************
- * WiFi Credentials Storage
+ * WiFi Credentials & Settings Storage
  *********************************************/
 static char StoredSSID[33] = {0};				// Max SSID length is 32 + null
 static char StoredPassword[65] = {0};			// Max password length is 64 + null
-static uint32_t StoredTimeout = 10000;			// Default 10 seconds
+static uint8_t StoredMaxAttempts = 1;			// Default single attempt
+static uint32_t StoredRetryDelayMs = 5000;		// Default 5 seconds between retries
+static bool StoredRebootOnFailure = false;		// Default: return error, don't reboot
+
+// Internal constant - per-attempt timeout (not user-configurable)
+static const uint32_t WIFI_TIMEOUT_MS = 15000;	// 15 seconds per attempt
+
+
+/*********************************************
+ * OTA Background Task
+ *********************************************/
+static TaskHandle_t OTA_TaskHandle = nullptr;	// Handle for OTA background task
+
+// Forward declaration for OTA background task
+static void OTA_BackgroundTask(void* pvParameters);
 
 
 /*********************************************
@@ -91,7 +105,7 @@ static inline void BLE_puts(const char* s)
  * @brief Log Levels to log:
  * By default, all log messages are enabled.
  *
- * Use RML_COMM_Logger_SetLevel() function to enable
+ * Use RML_COMM_Log_SetLevel() function to enable
  * or disable specific log level messages
  *************************************************/
 static uint8_t LogLevelsEnable[5] =
@@ -120,15 +134,15 @@ const char LogLevel_Str[5][10] =
 
 
 
-int8_t RML_COMM_Logger_Init()
+int8_t RML_COMM_Log_Init()
 {
 	/* Default to USB logging */
-	return RML_COMM_Logger_Init(e_USB);
+	return RML_COMM_Log_Init(e_USB);
 }
 
 
 
-int8_t RML_COMM_Logger_Init(uint8_t LoggingProtocol)
+int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol)
 {
 	/* Error check:
 	* Verify the LoggingProtocol is valid for the function */
@@ -171,7 +185,7 @@ int8_t RML_COMM_Logger_Init(uint8_t LoggingProtocol)
 
 
 
-int8_t RML_COMM_Logger_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Baudrate, uart_port_t UART_Num)
+int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Baudrate, uart_port_t UART_Num)
 {
 	/* Error check:
 	 * Verify the LoggingProtocol is valid for the function */
@@ -256,7 +270,7 @@ int8_t RML_COMM_Logger_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Ba
 
 
 
-int8_t RML_COMM_Logger_Init(uint8_t LoggingProtocol, const char* BT_Name)
+int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, const char* BT_Name)
 {
 	/* Error check:
 	 * Verify the LoggingProtocol is valid for the function */
@@ -291,7 +305,7 @@ int8_t RML_COMM_Logger_Init(uint8_t LoggingProtocol, const char* BT_Name)
 	Main_puts = &BLE_puts;
 
 	/* Disable colored logs for BT */
-	RML_COMM_Logger_EnableColor(0);
+	RML_COMM_Log_EnableColor(0);
 
 	/* Create mutex */
 	if (LogMutex == NULL)
@@ -308,7 +322,7 @@ int8_t RML_COMM_Logger_Init(uint8_t LoggingProtocol, const char* BT_Name)
 
 
 
-void RML_COMM_Logger_Msg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
+void RML_COMM_Log_Msg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
@@ -452,7 +466,7 @@ void RML_COMM_Logger_Msg(const char *Src, uint8_t LogLvl, const char* Msg, ... )
 
 
 
-int8_t RML_COMM_Logger_SetLevel(uint8_t LogLvl, uint8_t Enable)
+int8_t RML_COMM_Log_SetLevel(uint8_t LogLvl, uint8_t Enable)
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
@@ -498,7 +512,7 @@ int8_t RML_COMM_Logger_SetLevel(uint8_t LogLvl, uint8_t Enable)
 
 
 
-void RML_COMM_Logger_EnableColor(uint8_t Enable)
+void RML_COMM_Log_EnableColor(uint8_t Enable)
 {
 	/* Error check: Makes sure the logger was initialized */
 	if(!Logger_InitDone)
@@ -539,7 +553,7 @@ int8_t RML_COMM_Debug_LogStackUsage(UBaseType_t TaskStackSize)
 	float StackUsedPercent = 100.0f - StackFreePercent;
 
 	// Log usage
-	RML_COMM_Logger_Msg(pcTaskGetTaskName(NULL),
+	RML_COMM_Log_Msg(pcTaskGetTaskName(NULL),
 					e_DEBUG,
 					"Stack usage: %.2f%% used, %.2f%% free (%u bytes free of %u bytes total)",
 					StackUsedPercent,
@@ -968,7 +982,7 @@ void _RML_COMM_Assert_Handler(const char* FileName, uint32_t LineNumber, const c
 	/*
 	 * Assertion failed, log info
 	 */
-	RML_COMM_Logger_Msg("RML_ASSERT", e_FATAL, "ASSERTION FAILED:\r\n\t--> File: %s\r\n\t--> Line: %u\r\n\t--> Expr: %s", FileName, LineNumber, Expression);
+	RML_COMM_Log_Msg("RML_COMM_ASSERT", e_FATAL, "ASSERTION FAILED:\r\n\t--> File: %s\r\n\t--> Line: %u\r\n\t--> Expr: %s", FileName, LineNumber, Expression);
 
 	/* Call user callback if registered */
 	if (UserAssertCallback != nullptr)
@@ -985,18 +999,25 @@ void _RML_COMM_Assert_Handler(const char* FileName, uint32_t LineNumber, const c
 
 
 
-int8_t RML_COMM_WiFi_Connect(const char* SSID, const char* Password, uint32_t TimeoutMs)
+int8_t RML_COMM_WiFi_Connect(const char* SSID, const char* Password,
+							  uint8_t MaxAttempts, uint32_t RetryDelayMs, bool RebootOnFailure)
 {
-	static const char FuncName[] = "RML_COMM_WiFi_Connect";
+	static const char FuncName[] = "RML_COMM_WiFi_Connect()";
 
 	/* Error check: SSID is not null or empty */
 	if (SSID == nullptr || strlen(SSID) == 0)
 	{
-		RML_COMM_Logger_Msg(FuncName, e_ERROR, "SSID is null or empty");
+		RML_COMM_Log_Msg(FuncName, e_ERROR, "SSID is null or empty");
 		return -1;
 	}
 
-	/* Store credentials for reconnect */
+	/* Ensure at least 1 attempt */
+	if (MaxAttempts == 0)
+	{
+		MaxAttempts = 1;
+	}
+	
+	/* Store credentials for Reconnect() */
 	strncpy(StoredSSID, SSID, sizeof(StoredSSID) - 1);
 	StoredSSID[sizeof(StoredSSID) - 1] = '\0';
 
@@ -1010,65 +1031,182 @@ int8_t RML_COMM_WiFi_Connect(const char* SSID, const char* Password, uint32_t Ti
 		StoredPassword[0] = '\0';
 	}
 
-	StoredTimeout = TimeoutMs;
+	/* Store retry settings for Reconnect() */
+	StoredMaxAttempts = MaxAttempts;
+	StoredRetryDelayMs = RetryDelayMs;
+	StoredRebootOnFailure = RebootOnFailure;
 
-	RML_COMM_Logger_Msg(FuncName, e_INFO, "Connecting to %s...", SSID);
-
-	WiFi.begin(SSID, Password);
-
-	uint32_t startTime = millis();
-	while (WiFi.status() != WL_CONNECTED)
+	/* Retry loop */
+	for (uint8_t attempt = 1; attempt <= MaxAttempts; attempt++)
 	{
-		if (millis() - startTime >= TimeoutMs)
+		if (MaxAttempts > 1)
 		{
-			RML_COMM_Logger_Msg(FuncName, e_ERROR, "Connection timeout after %u ms", TimeoutMs);
-			return -1;
+			RML_COMM_Log_Msg(FuncName, e_INFO, "Attempt %u/%u: Connecting to %s...", attempt, MaxAttempts, SSID);
 		}
-		delay(100);
+		else
+		{
+			RML_COMM_Log_Msg(FuncName, e_INFO, "Connecting to %s...", SSID);
+		}
+
+		/* Ensure clean state before connecting */
+		WiFi.disconnect(true);				/* true = turn off WiFi radio completely */
+		vTaskDelay(pdMS_TO_TICKS(500));		/* Give WiFi driver time to fully reset */
+		WiFi.mode(WIFI_STA);				/* Set station mode */
+
+		WiFi.begin(SSID, Password);
+
+		/* Wait for connection, checking for success or definitive failure */
+		uint32_t startTime = millis();
+		while (millis() - startTime < WIFI_TIMEOUT_MS)
+		{
+			wl_status_t status = WiFi.status();
+
+			/* Success */
+			if (status == WL_CONNECTED)
+			{
+				RML_COMM_Log_Msg(FuncName, e_INFO, "Connected! IP: %s", WiFi.localIP().toString().c_str());
+				return 0;
+			}
+
+			/* Definitive failures - no point waiting longer */
+			if (status == WL_NO_SSID_AVAIL)
+			{
+				RML_COMM_Log_Msg(FuncName, e_ERROR, "SSID '%s' not found", SSID);
+				break;
+			}
+			if (status == WL_CONNECT_FAILED)
+			{
+				RML_COMM_Log_Msg(FuncName, e_ERROR, "Connection failed (wrong password?)");
+				break;
+			}
+
+			vTaskDelay(pdMS_TO_TICKS(100));
+		}
+
+		/* If we get here, attempt failed (timeout or definitive failure) */
+		if (WiFi.status() != WL_NO_SSID_AVAIL && WiFi.status() != WL_CONNECT_FAILED)
+		{
+			RML_COMM_Log_Msg(FuncName, e_ERROR, "Connection attempt timed out");
+		}
+
+		/* Disconnect before retry to ensure clean state */
+		WiFi.disconnect(true);
+
+		/* If not last attempt, wait before retry */
+		if (attempt < MaxAttempts)
+		{
+			RML_COMM_Log_Msg(FuncName, e_WARNING, "Retrying in %u ms...", RetryDelayMs);
+			vTaskDelay(pdMS_TO_TICKS(RetryDelayMs));
+		}
 	}
 
-	RML_COMM_Logger_Msg(FuncName, e_INFO, "Connected! IP: %s", WiFi.localIP().toString().c_str());
-	return 0;
+	/* All attempts exhausted */
+	if (RebootOnFailure)
+	{
+		RML_COMM_Log_Msg(FuncName, e_FATAL, "WiFi connection failed after %u attempts. Board will restart in 3 seconds...", MaxAttempts);
+		vTaskDelay(pdMS_TO_TICKS(3000));
+		ESP.restart();
+		/* Never returns */
+	}
+
+	return -1;
 }
 
 
 
 int8_t RML_COMM_WiFi_Reconnect()
 {
-	static const char FuncName[] = "RML_COMM_WiFi_Reconnect";
+	static const char FuncName[] = "RML_COMM_WiFi_Reconnect()";
 
 	if (StoredSSID[0] == '\0')
 	{
-		RML_COMM_Logger_Msg(FuncName, e_ERROR, "No stored credentials - call RML_COMM_WiFi_Connect first");
+		RML_COMM_Log_Msg(FuncName, e_ERROR, "No stored credentials - call RML_COMM_WiFi_Connect first");
 		return -1;
 	}
 
-	RML_COMM_Logger_Msg(FuncName, e_INFO, "Reconnecting to %s...", StoredSSID);
-
-	WiFi.begin(StoredSSID, StoredPassword);
-
-	uint32_t startTime = millis();
-	while (WiFi.status() != WL_CONNECTED)
+	/* Retry loop using stored parameters */
+	for (uint8_t attempt = 1; attempt <= StoredMaxAttempts; attempt++)
 	{
-		if (millis() - startTime >= StoredTimeout)
+		if (StoredMaxAttempts > 1)
 		{
-			RML_COMM_Logger_Msg(FuncName, e_ERROR, "Reconnection timeout");
-			return -1;
+			RML_COMM_Log_Msg(FuncName, e_INFO, "Attempt %u/%u: Reconnecting to %s...", attempt, StoredMaxAttempts, StoredSSID);
 		}
-		delay(100);
+		else
+		{
+			RML_COMM_Log_Msg(FuncName, e_INFO, "Reconnecting to %s...", StoredSSID);
+		}
+
+		/* Ensure clean state before connecting */
+		WiFi.disconnect(true);				/* true = turn off WiFi radio completely */
+		vTaskDelay(pdMS_TO_TICKS(500));		/* Give WiFi driver time to fully reset */
+		WiFi.mode(WIFI_STA);				/* Set station mode */
+
+		WiFi.begin(StoredSSID, StoredPassword);
+
+		/* Wait for connection, checking for success or definitive failure */
+		uint32_t startTime = millis();
+		while (millis() - startTime < WIFI_TIMEOUT_MS)
+		{
+			wl_status_t status = WiFi.status();
+
+			/* Success */
+			if (status == WL_CONNECTED)
+			{
+				RML_COMM_Log_Msg(FuncName, e_INFO, "Reconnected! IP: %s", WiFi.localIP().toString().c_str());
+				return 0;
+			}
+
+			/* Definitive failures - no point waiting longer */
+			if (status == WL_NO_SSID_AVAIL)
+			{
+				RML_COMM_Log_Msg(FuncName, e_ERROR, "SSID '%s' not found", StoredSSID);
+				break;
+			}
+			if (status == WL_CONNECT_FAILED)
+			{
+				RML_COMM_Log_Msg(FuncName, e_ERROR, "Connection failed (wrong password?)");
+				break;
+			}
+
+			vTaskDelay(pdMS_TO_TICKS(100));
+		}
+
+		/* If we get here, attempt failed (timeout or definitive failure) */
+		if (WiFi.status() != WL_NO_SSID_AVAIL && WiFi.status() != WL_CONNECT_FAILED)
+		{
+			RML_COMM_Log_Msg(FuncName, e_ERROR, "Reconnection attempt timed out");
+		}
+
+		/* Disconnect before retry to ensure clean state */
+		WiFi.disconnect(true);
+
+		/* If not last attempt, wait before retry */
+		if (attempt < StoredMaxAttempts)
+		{
+			RML_COMM_Log_Msg(FuncName, e_WARNING, "Retrying in %u ms...", StoredRetryDelayMs);
+			vTaskDelay(pdMS_TO_TICKS(StoredRetryDelayMs));
+		}
 	}
 
-	RML_COMM_Logger_Msg(FuncName, e_INFO, "Reconnected! IP: %s", WiFi.localIP().toString().c_str());
-	return 0;
+	/* All attempts exhausted */
+	if (StoredRebootOnFailure)
+	{
+		RML_COMM_Log_Msg(FuncName, e_FATAL, "WiFi reconnection failed after %u attempts. Board will restart in 3 seconds...", StoredMaxAttempts);
+		vTaskDelay(pdMS_TO_TICKS(3000));
+		ESP.restart();
+		/* Never returns */
+	}
+
+	return -1;
 }
 
 
 
 void RML_COMM_WiFi_Disconnect()
 {
-	static const char FuncName[] = "RML_COMM_WiFi_Disconnect";
+	static const char FuncName[] = "RML_COMM_WiFi_Disconnect()";
 	WiFi.disconnect();
-	RML_COMM_Logger_Msg(FuncName, e_INFO, "Disconnected from WiFi");
+	RML_COMM_Log_Msg(FuncName, e_INFO, "Disconnected from WiFi");
 }
 
 
@@ -1081,9 +1219,9 @@ bool RML_COMM_WiFi_IsConnected()
 
 
 
-void RML_COMM_OTA_Setup(const char* Hostname, const char* Password)
+void RML_COMM_OTA_Setup(const char* Hostname, const char* Password, bool RunInBackground)
 {
-	static const char FuncName[] = "RML_COMM_OTA_Setup";
+	static const char FuncName[] = "RML_COMM_OTA_Setup()";
 
 	/* Check if hostname is given */
 	if (Hostname != NULL)
@@ -1114,21 +1252,36 @@ void RML_COMM_OTA_Setup(const char* Hostname, const char* Password)
 			/* NOTE: If updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end() */
 		}
 
-		RML_COMM_Logger_Msg(FuncName, e_INFO, "Start updating %s", type);
+		RML_COMM_Log_Msg(FuncName, e_INFO, "Start updating %s", type);
 	});
 
 	ArduinoOTA.onEnd([]()
 	{
-		RML_COMM_Logger_Msg(FuncName, e_INFO, "End");
+		RML_COMM_Log_Msg(FuncName, e_INFO, "End");
 	});
 
 	ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
 	{
-		// Clamp: if progress > total (shouldn't happen, but be safe) use total
-		const uint32_t capped = (total && progress > total) ? total : progress;
-		// Guard + 64-bit math: If total==0 → pct=0; else pct = floor((capped*100) / total) with 64-bit multiply
-		const uint32_t pct = total ? (uint32_t)(((uint64_t)capped * 100u) / (uint64_t)total) : 0u;
-		RML_COMM_Logger_Msg(FuncName, e_INFO, "Progress: %u%%", pct);
+		static uint8_t lastLoggedThreshold = 255;  /* 255 = uninitialized, will log 0% on first call */
+
+		/* Calculate current percentage */
+		const uint32_t pct = total ? (uint32_t)(((uint64_t)progress * 100u) / (uint64_t)total) : 0u;
+
+		/* Round down to nearest 10% threshold */
+		const uint8_t currentThreshold = (pct / 10) * 10;
+
+		/* Only log when crossing a new 10% threshold */
+		if (currentThreshold != lastLoggedThreshold)
+		{
+			RML_COMM_Log_Msg("RML_COMM_OTA_Setup()", e_INFO, "Progress: %u%%", currentThreshold);
+			lastLoggedThreshold = currentThreshold;
+		}
+
+		/* Reset tracker when upload completes (so next OTA starts fresh) */
+		if (pct >= 100)
+		{
+			lastLoggedThreshold = 255;
+		}
 	});
 
 	ArduinoOTA.onError([](ota_error_t error)
@@ -1162,17 +1315,53 @@ void RML_COMM_OTA_Setup(const char* Hostname, const char* Password)
 				break;
 		}
 
-		RML_COMM_Logger_Msg(FuncName, e_ERROR, "OTA Error[%u]: %s", error, errorMsg);
+		RML_COMM_Log_Msg(FuncName, e_ERROR, "OTA Error[%u]: %s", error, errorMsg);
 	});
 
 	ArduinoOTA.begin();
+
+	/* Spawn background task if requested */
+	if (RunInBackground)
+	{
+		/* Only create task if it doesn't already exist */
+		if (OTA_TaskHandle == nullptr)
+		{
+			xTaskCreate(
+				OTA_BackgroundTask,
+				"OTA",
+				4096,		// Stack size in bytes
+				NULL,
+				1,			// Low priority - won't interfere with user tasks
+				&OTA_TaskHandle
+			);
+
+			RML_COMM_Log_Msg(FuncName, e_INFO, "OTA background task started");
+		}
+	}
+}
+
+
+
+/**
+ * @brief Background task that handles OTA updates automatically.
+ *        Runs at low priority (1) and checks for updates every 500ms.
+ */
+static void OTA_BackgroundTask(void* pvParameters)
+{
+	(void)pvParameters;		// Unused
+
+	while (1)
+	{
+		ArduinoOTA.handle();
+		vTaskDelay(pdMS_TO_TICKS(500));		// Check every 500ms
+	}
 }
 
 
 
 void RML_COMM_OTA_Handle()
 {
-	/* Handle OTA updates */
+	/* Handle OTA updates - only needed if RunInBackground = false */
 	ArduinoOTA.handle();
 }
 
@@ -1207,6 +1396,50 @@ int8_t RML_COMM_LED_SetColor(Adafruit_NeoPixel &LED_Obj, uint8_t Red, uint8_t Gr
 	LED_Obj.show();
 
 	// Wait for a short time to allow the LEDs to update
+	vTaskDelay(pdMS_TO_TICKS(1));
+
+	return 0;
+}
+
+
+
+void RML_COMM_LED_Off(Adafruit_NeoPixel &LED_Obj)
+{
+	LED_Obj.clear();
+	LED_Obj.show();
+	vTaskDelay(pdMS_TO_TICKS(1));
+}
+
+
+
+void RML_COMM_LED_SetBrightness(Adafruit_NeoPixel &LED_Obj, uint8_t Brightness)
+{
+	LED_Obj.setBrightness(Brightness);
+	LED_Obj.show();
+	vTaskDelay(pdMS_TO_TICKS(1));
+}
+
+
+
+int8_t RML_COMM_LED_SetPixels(Adafruit_NeoPixel &LED_Obj, uint16_t StartIndex, uint8_t Red, uint8_t Green, uint8_t Blue, uint16_t Count)
+{
+	uint16_t NumLEDs = LED_Obj.numPixels();
+
+	// Bounds check
+	if (StartIndex >= NumLEDs || Count == 0)
+	{
+		return -1;
+	}
+
+	// Clamp count to available pixels
+	if (StartIndex + Count > NumLEDs)
+	{
+		Count = NumLEDs - StartIndex;
+	}
+
+	const uint32_t Color = LED_Obj.Color(Red, Green, Blue);
+	LED_Obj.fill(Color, StartIndex, Count);
+	LED_Obj.show();
 	vTaskDelay(pdMS_TO_TICKS(1));
 
 	return 0;

@@ -11,7 +11,7 @@
 #include "Remal_CommonUtils.h"
 
 
-int MessageDelay_ms = 2000;         // Delay between log messages in milliseconds
+int MessageDelay_ms = 2000;                 // Delay between log messages in milliseconds
 
 /* UART Configuration */
 const int TX_Pin = 6;                       // UART TX Pin (RX pin is not needed for logging)
@@ -33,7 +33,7 @@ void setup()
     RML_COMM_LED_Init(Shabakah_LED_2, LED_Brightness);
 
     /* Initialize the logger using UART */
-    if( RML_COMM_Logger_Init(e_UART, TX_Pin, Baudrate, UART_Num) != 0 )
+    if( RML_COMM_Log_Init(e_UART, TX_Pin, Baudrate, UART_Num) != 0 )
     {
         // Logger initialization failed, blink LED RED to indicate error
         while(1)
@@ -48,14 +48,14 @@ void setup()
     }
 
     /* Enable/disable colored logs (Note: Arduino Serial Monitor does not support colors, use another terminal like TeraTerm, PuTTY, etc.) */
-    RML_COMM_Logger_EnableColor(1);
+    RML_COMM_Log_EnableColor(1);
 
     /* Enable/disable specific log levels as needed */
-    RML_COMM_Logger_SetLevel(e_DEBUG, 1);
-    RML_COMM_Logger_SetLevel(e_INFO, 1);
-    RML_COMM_Logger_SetLevel(e_WARNING, 1);
-    RML_COMM_Logger_SetLevel(e_ERROR, 1);
-    RML_COMM_Logger_SetLevel(e_FATAL, 1);
+    RML_COMM_Log_SetLevel(e_DEBUG, 1);
+    RML_COMM_Log_SetLevel(e_INFO, 1);
+    RML_COMM_Log_SetLevel(e_WARNING, 1);
+    RML_COMM_Log_SetLevel(e_ERROR, 1);
+    RML_COMM_Log_SetLevel(e_FATAL, 1);
 }
 
 
@@ -65,153 +65,153 @@ void loop()
      * Log various messages with different log levels
      */
     delay(MessageDelay_ms);
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "Hello World! This is a debug message");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "Hello World! This is a debug message");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_INFO, "and this is an info message");
+    RML_COMM_Log_Msg("Loop", e_INFO, "and this is an info message");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_WARNING, "and this is a warning message");
+    RML_COMM_Log_Msg("Loop", e_WARNING, "and this is a warning message");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_ERROR, "and this is an error message");
+    RML_COMM_Log_Msg("Loop", e_ERROR, "and this is an error message");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_FATAL, "and this is a fatal message");
+    RML_COMM_Log_Msg("Loop", e_FATAL, "and this is a fatal message");
     delay(MessageDelay_ms);
 
     /*
      * Explain supported format specifiers for the logger
      */
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "The above are all the log levels. Now, let's test the logger's ability to print variables, it's similar to printf()");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "The above are all the log levels. Now, let's test the logger's ability to print variables, it's similar to printf()");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "However, note that it doesn't support all the format specifiers like printf()");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "However, note that it doesn't support all the format specifiers like printf()");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "Here are all the currently supported format specifiers:");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "Here are all the currently supported format specifiers:");
     delay(MessageDelay_ms);
 
     char str[] = "Hello World!";
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "string(%%s): %s", str); // Log string using %s
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "string(%%s): %s", str); // Log string using %s
     delay(MessageDelay_ms);
 
     char c = 'A';
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "char(%%c): %c", c); // Log character using %c
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "char(%%c): %c", c); // Log character using %c
     delay(MessageDelay_ms);
 
     unsigned int u = 123456;
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "unsigned int(%%u): %u", u); // Log unsigned integer using %u
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "unsigned int(%%u): %u", u); // Log unsigned integer using %u
     delay(MessageDelay_ms);
 
     int i = -123456;
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "int(%%d or %%i): %d", i); // Log signed integer using %d or %i
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "int(%%d or %%i): %d", i); // Log signed integer using %d or %i
     delay(MessageDelay_ms);
 
     /*
      * Demonstrate escaping % character in log messages
      */
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "To print a '%%' character, you need to escape it by adding another '%%'");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "To print a '%%' character, you need to escape it by adding another '%%'");
     delay(MessageDelay_ms);
 
     // Default float precision demonstration (2 decimal places)
     float f = 5.272016;
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "Default float precision (%%f): %f", f);
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "Default float precision (%%f): %f", f);
     delay(MessageDelay_ms);
 
     // Demonstrate specifying custom decimal precision with float
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "float with 4 decimals (%%.4f): %.4f", f);
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "float with 4 decimals (%%.4f): %.4f", f);
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "float with 6 decimals (%%.6f): %.6f", f);
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "float with 6 decimals (%%.6f): %.6f", f);
     delay(MessageDelay_ms);
 
     // Use double for higher precision
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "For precision beyond 6 decimals, use a double:");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "For precision beyond 6 decimals, use a double:");
     delay(MessageDelay_ms);
 
     double d = 10.123456789123456;
 
     // Demonstrating double precision clearly
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "double with 10 decimals (%%.10f): %.10f", d);
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "double with 10 decimals (%%.10f): %.10f", d);
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "double with 12 decimals (recommended, %%.12f): %.12f", d);
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "double with 12 decimals (recommended, %%.12f): %.12f", d);
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "double with 15 decimals (max useful precision, %%.15f): %.15f", d);
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "double with 15 decimals (max useful precision, %%.15f): %.15f", d);
     delay(MessageDelay_ms);
 
     // Explain limitations clearly
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "Note: Due to floating-point limitations, precision beyond ~15 decimals may be inaccurate");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "Note: Due to floating-point limitations, precision beyond ~15 decimals may be inaccurate");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "If more than 15 decimal places are requested, the function defaults to 15 decimals");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "If more than 15 decimal places are requested, the function defaults to 15 decimals");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "Recommendation: Stick to max 6 decimals for float, 10-12 decimals for double for reliable results");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "Recommendation: Stick to max 6 decimals for float, 10-12 decimals for double for reliable results");
     delay(MessageDelay_ms);
 
     /*
      * Demonstrate printing numbers in hexadecimal
      */
     int number = 47802;
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "You can also print numbers in hexadecimal");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "You can also print numbers in hexadecimal");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "Number in decimal(%%d): %d", number); // Log number in decimal
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "Number in decimal(%%d): %d", number); // Log number in decimal
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "Number in hexadecimal(%%x): 0x%x", number); // Log number in hexadecimal
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "Number in hexadecimal(%%x): 0x%x", number); // Log number in hexadecimal
     delay(MessageDelay_ms);
 
     /*
      * Demonstrate changing the log source identifier
      */
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "You can change the log source by changing the first argument of the log message");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "You can change the log source by changing the first argument of the log message");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Main", e_DEBUG, "Loop has now been changed to Main"); // Change log source to "Main"
+    RML_COMM_Log_Msg("Main", e_DEBUG, "Loop has now been changed to Main"); // Change log source to "Main"
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("RandomFunction", e_DEBUG, "This is a debug message from a random function"); // Log from a random function
+    RML_COMM_Log_Msg("RandomFunction", e_DEBUG, "This is a debug message from a random function"); // Log from a random function
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Space", e_DEBUG, "Change the log source to anything you want, it doesn't have to be a function name. The point of it is to help you identify where the log message is coming from");
+    RML_COMM_Log_Msg("Space", e_DEBUG, "Change the log source to anything you want, it doesn't have to be a function name. The point of it is to help you identify where the log message is coming from");
     delay(MessageDelay_ms);
 
     /*
      * Discuss enabling or disabling log messages based on log level
      */
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "You can also enable or disable log messages based on their log level");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "You can also enable or disable log messages based on their log level");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "For example, you can disable all debug messages and only enable info, warning, error, and fatal messages");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "For example, you can disable all debug messages and only enable info, warning, error, and fatal messages");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "This is useful when you want to reduce the amount of log messages being printed to the console");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "This is useful when you want to reduce the amount of log messages being printed to the console");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "You can do this by calling the following function:");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "You can do this by calling the following function:");
     delay(MessageDelay_ms);
 
     /*
      * Demonstrate disabling debug messages
      */
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "RML_COMM_Logger_SetLevel(e_DEBUG, 0);");
-    RML_COMM_Logger_SetLevel(e_DEBUG, 0);
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "RML_COMM_Log_SetLevel(e_DEBUG, 0);");
+    RML_COMM_Log_SetLevel(e_DEBUG, 0);
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "All debug messages are now disabled you will not see this message");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "All debug messages are now disabled you will not see this message");
 
     /*
      * Re-enable debug messages
      */
-    RML_COMM_Logger_Msg("Loop", e_INFO, "To re-enable debug messages, call the following function:");
+    RML_COMM_Log_Msg("Loop", e_INFO, "To re-enable debug messages, call the following function:");
     delay(MessageDelay_ms);
 
-    RML_COMM_Logger_Msg("Loop", e_INFO, "RML_COMM_Logger_SetLevel(e_DEBUG, 1);");
-    RML_COMM_Logger_SetLevel(e_DEBUG, 1);
+    RML_COMM_Log_Msg("Loop", e_INFO, "RML_COMM_Log_SetLevel(e_DEBUG, 1);");
+    RML_COMM_Log_SetLevel(e_DEBUG, 1);
     delay(MessageDelay_ms);
 
     /*
@@ -222,8 +222,8 @@ void loop()
     /*
      * Final messages before the demo repeats
      */
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "This was a brief overview of the logger. For more information, please refer to the documentation and source code");
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "Good luck on your projects and build something awesome!");
-    RML_COMM_Logger_Msg("Loop", e_DEBUG, "The demo will now repeat\n\n");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "This was a brief overview of the logger. For more information, please refer to the documentation and source code");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "Good luck on your projects and build something awesome!");
+    RML_COMM_Log_Msg("Loop", e_DEBUG, "The demo will now repeat\n\n");
     delay(MessageDelay_ms);
 }

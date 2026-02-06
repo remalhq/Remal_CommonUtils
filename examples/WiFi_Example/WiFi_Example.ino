@@ -6,8 +6,8 @@
  * @date      Feb 4 2026
  *
  * @brief     Demonstrates how to use the WiFi wrapper functions from the Remal CommonUtils library.
- *            This example shows connecting to WiFi with timeout, checking connection status,
- *            and automatic reconnection when the connection drops.
+ *            This example shows connecting to WiFi with automatic retry and optional auto-restart
+ *            on failure.
  *
  * @note      Replace "Your_SSID" and "Your_Password" with your actual WiFi credentials.
 */
@@ -18,29 +18,37 @@
 const char* SSID     = "Your_SSID";         // Your Wi-Fi SSID (network name)
 const char* Password = "Your_Password";     // Your Wi-Fi password
 
-int WiFi_Timeout_ms = 15000;                // Max time to wait for WiFi connection (15 seconds)
-
 
 void setup()
 {
 	/* Initialize the logger using USB */
-	RML_COMM_Logger_Init(e_USB);
+	RML_COMM_Log_Init(e_USB);
 
 	delay(3000);  // Give time for serial monitor to connect
 
-	RML_COMM_Logger_Msg("Setup", e_INFO, "WiFi Example Starting...");
+	RML_COMM_Log_Msg("Setup", e_INFO, "WiFi Example Starting...");
 
 	/*
-	 * Connect to WiFi using the library wrapper
-	 * This function:
-	 *   - Stores credentials for later reconnection
-	 *   - Logs connection status automatically
-	 *   - Returns 0 on success, -1 on timeout
+	 * Connect to WiFi with retry support:
+	 *
+	 * RML_COMM_WiFi_Connect(SSID, Password, MaxAttempts, RetryDelayMs, RebootOnFailure)
+	 *
+	 * Parameters:
+	 *   - SSID: Network name
+	 *   - Password: Network password (NULL for open networks)
+	 *   - MaxAttempts: Number of connection attempts (default: 1)
+	 *   - RetryDelayMs: Delay between retries in ms (default: 5000)
+	 *   - RebootOnFailure: Auto-restart if all attempts fail (default: false)
+	 *
+	 * Examples:
+	 *   RML_COMM_WiFi_Connect("SSID", "pass");                // Single attempt, no reboot
+	 *   RML_COMM_WiFi_Connect("SSID", "pass", 3);             // 3 attempts, 5s delay, no reboot
+	 *   RML_COMM_WiFi_Connect("SSID", "pass", 5, 5000, true); // 5 attempts, reboot on failure
 	 */
-	if (RML_COMM_WiFi_Connect(SSID, Password, WiFi_Timeout_ms) != 0)
+	if (RML_COMM_WiFi_Connect(SSID, Password, 3, 5000, false) != 0)
 	{
-		RML_COMM_Logger_Msg("Setup", e_ERROR, "Failed to connect to WiFi!");
-		RML_COMM_Logger_Msg("Setup", e_ERROR, "Please check your SSID and password, then reset the board.");
+		RML_COMM_Log_Msg("Setup", e_ERROR, "Failed to connect to WiFi after 3 attempts!");
+		RML_COMM_Log_Msg("Setup", e_ERROR, "Please check your SSID and password, then reset the board.");
 
 		// Halt execution
 		while (1)
@@ -49,8 +57,8 @@ void setup()
 		}
 	}
 
-	RML_COMM_Logger_Msg("Setup", e_INFO, "WiFi connected successfully!");
-	RML_COMM_Logger_Msg("Setup", e_INFO, "The loop will now monitor the connection and reconnect if needed.");
+	RML_COMM_Log_Msg("Setup", e_INFO, "WiFi connected successfully!");
+	RML_COMM_Log_Msg("Setup", e_INFO, "The loop will now monitor the connection and reconnect if needed.");
 }
 
 
@@ -58,24 +66,24 @@ void loop()
 {
 	/*
 	 * Check if WiFi is still connected
-	 * If disconnected, attempt to reconnect using stored credentials
+	 * If disconnected, attempt to reconnect using stored credentials and retry settings
 	 */
 	if (!RML_COMM_WiFi_IsConnected())
 	{
-		RML_COMM_Logger_Msg("Loop", e_WARNING, "WiFi connection lost! Attempting to reconnect...");
+		RML_COMM_Log_Msg("Loop", e_WARNING, "WiFi connection lost!");
 
 		/*
-		 * Reconnect using stored credentials from the initial RML_COMM_WiFi_Connect() call
-		 * This uses the same timeout that was specified during initial connection
+		 * Reconnect uses the same retry settings from the initial Connect() call:
+		 *   - 3 attempts
+		 *   - 5 second delay between attempts
+		 *   - No auto-reboot (returns -1 on failure)
 		 */
 		if (RML_COMM_WiFi_Reconnect() != 0)
 		{
-			RML_COMM_Logger_Msg("Loop", e_ERROR, "Reconnection failed! Will retry in 5 seconds...");
-			delay(5000);
+			RML_COMM_Log_Msg("Loop", e_ERROR, "All reconnection attempts failed! Will try again in 10 seconds...");
+			delay(10000);
 			return;  // Skip rest of loop and try again
 		}
-
-		RML_COMM_Logger_Msg("Loop", e_INFO, "Reconnected successfully!");
 	}
 
 	// Your application code goes here
@@ -83,7 +91,7 @@ void loop()
 	static uint32_t lastLogTime = 0;
 	if (millis() - lastLogTime >= 10000)
 	{
-		RML_COMM_Logger_Msg("Loop", e_DEBUG, "WiFi still connected. IP: %s", WiFi.localIP().toString().c_str());
+		RML_COMM_Log_Msg("Loop", e_DEBUG, "WiFi still connected. IP: %s", WiFi.localIP().toString().c_str());
 		lastLogTime = millis();
 	}
 

@@ -7,26 +7,35 @@
 #######################################
 LogLevel_Enum	KEYWORD1
 LogProtocol_Enum	KEYWORD1
+AssertCallback_t	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
 #######################################
-RML_COMM_LoggerInit	KEYWORD2
-RML_COMM_LogMsg	KEYWORD2
-RML_COMM_LogLevelSet	KEYWORD2
-RML_COMM_EnableColorLogs	KEYWORD2
-RML_COMM_LogStackUsage	KEYWORD2
+RML_COMM_Log_Init	KEYWORD2
+RML_COMM_Log_Msg	KEYWORD2
+RML_COMM_Log_SetLevel	KEYWORD2
+RML_COMM_Log_EnableColor	KEYWORD2
+RML_COMM_Debug_LogStackUsage	KEYWORD2
 RML_COMM_printf	KEYWORD2
 RML_COMM_vprintf	KEYWORD2
-RML_COMM_utoa	KEYWORD2
-RML_COMM_itoa	KEYWORD2
-RML_COMM_ftoa	KEYWORD2
-RML_COMM_ReverseString	KEYWORD2
-RML_COMM_SetupArduinoOTA	KEYWORD2
-RML_COMM_HandleArduinoOTA	KEYWORD2
+RML_COMM_String_utoa	KEYWORD2
+RML_COMM_String_itoa	KEYWORD2
+RML_COMM_String_ftoa	KEYWORD2
+RML_COMM_String_Reverse	KEYWORD2
+RML_COMM_WiFi_Connect	KEYWORD2
+RML_COMM_WiFi_Reconnect	KEYWORD2
+RML_COMM_WiFi_Disconnect	KEYWORD2
+RML_COMM_WiFi_IsConnected	KEYWORD2
+RML_COMM_OTA_Setup	KEYWORD2
+RML_COMM_OTA_Handle	KEYWORD2
 RML_COMM_LED_Init	KEYWORD2
-RML_COMM_LED_SetLEDColor	KEYWORD2
-RML_ASSERT	KEYWORD2
+RML_COMM_LED_SetColor	KEYWORD2
+RML_COMM_LED_Off	KEYWORD2
+RML_COMM_LED_SetBrightness	KEYWORD2
+RML_COMM_LED_SetPixels	KEYWORD2
+RML_COMM_Assert_SetCallback	KEYWORD2
+RML_COMM_ASSERT	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)

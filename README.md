@@ -60,17 +60,17 @@ build_flags =
 
 void setup()
 {
-    RML_COMM_Logger_Init(e_USB);        // Initialize logger with default settings (all log levels enabled)
-    RML_COMM_Logger_EnableColor(1);     // Enable colored log output (Make sure your terminal supports ANSI colors, Arduino Serial Monitor does not support colors)
+    RML_COMM_Log_Init(e_USB);        // Initialize logger with default settings (all log levels enabled)
+    RML_COMM_Log_EnableColor(1);     // Enable colored log output (Make sure your terminal supports ANSI colors, Arduino Serial Monitor does not support colors)
 }
 
 void loop()
 {
-    RML_COMM_Logger_Msg("Loop", e_INFO, "Logging example message.");
+    RML_COMM_Log_Msg("Loop", e_INFO, "Logging example message.");
 }
 ```
 
-## Example Usage (WiFi Connection)
+## Example Usage (WiFi Connection with Auto-Retry)
 ```cpp
 #include <Remal_CommonUtils.h>
 
@@ -79,23 +79,24 @@ const char* Password = "Your_Password";
 
 void setup()
 {
-    RML_COMM_Logger_Init(e_USB);
+    RML_COMM_Log_Init(e_USB);
 
-    // Connect to WiFi with 15 second timeout
-    if (RML_COMM_WiFi_Connect(SSID, Password, 15000) != 0)
-    {
-        RML_COMM_Logger_Msg("Setup", e_FATAL, "WiFi connection failed!");
-        while(1) { delay(1000); }
-    }
+    // Connect to WiFi with retry support:
+    // - 3 connection attempts
+    // - 5 second delay between attempts
+    // - Auto-reboot if all attempts fail
+    RML_COMM_WiFi_Connect(SSID, Password, 3, 5000, true);
+    // If we reach here, WiFi is connected
 }
 
 void loop()
 {
     // Check connection and reconnect if needed
+    // Reconnect uses the same retry settings from Connect()
     if (!RML_COMM_WiFi_IsConnected())
     {
-        RML_COMM_Logger_Msg("Loop", e_WARNING, "WiFi lost, reconnecting...");
-        RML_COMM_WiFi_Reconnect();
+        RML_COMM_Log_Msg("Loop", e_WARNING, "WiFi lost, reconnecting...");
+        RML_COMM_WiFi_Reconnect();  // Will auto-reboot if all attempts fail
     }
 
     delay(1000);
@@ -104,17 +105,29 @@ void loop()
 
 ## Changelog
 ### v2.0 (Breaking Changes):
-**⚠️ This is a major release with breaking API changes. All function names have been renamed.**
+- **Breaking:** All functions renamed to `RML_COMM_<Group>_<Function>` convention for better organization and autocomplete. See migration table below.
+- **Breaking:** `RML_ASSERT` renamed to `RML_COMM_ASSERT`, `RML_ASSERT_ENABLE` renamed to `RML_COMM_ASSERT_ENABLE`
+- Added `RML_COMM_Assert_SetCallback()` to register a callback that executes before halt on assertion failure
+- Assert macro now logs the failed expression string in addition to file and line number
+- Added WiFi wrapper functions with auto-retry and auto-restart support:
+    - `RML_COMM_WiFi_Connect()` - Connect with configurable retry attempts, delay, and optional reboot on failure
+    - `RML_COMM_WiFi_Reconnect()` - Reconnect using stored credentials and retry settings
+    - `RML_COMM_WiFi_Disconnect()` - Clean disconnect
+    - `RML_COMM_WiFi_IsConnected()` - Check connection status
+- Added `RunInBackground` parameter to `RML_COMM_OTA_Setup()` (default: true) - OTA now runs in a FreeRTOS background task automatically
+- Added new LED functions: `RML_COMM_LED_Off()`, `RML_COMM_LED_SetBrightness()`, `RML_COMM_LED_SetPixels()`
+- Added `#include <WiFi.h>` to header
+- Created new `WiFi_Example.ino` and `LED_Example.ino` examples
+- Updated all existing examples to use new function names
 
-#### Breaking Changes - Function Renames
-All functions have been renamed to follow `RML_COMM_<Group>_<Function>` naming convention for better organization and autocomplete support:
+**Migration Table (v1.x → v2.0):**
 
 | Old Name (v1.x) | New Name (v2.0) |
 |-----------------|-----------------|
-| `RML_COMM_LoggerInit()` | `RML_COMM_Logger_Init()` |
-| `RML_COMM_LogMsg()` | `RML_COMM_Logger_Msg()` |
-| `RML_COMM_LogLevelSet()` | `RML_COMM_Logger_SetLevel()` |
-| `RML_COMM_EnableColorLogs()` | `RML_COMM_Logger_EnableColor()` |
+| `RML_COMM_LoggerInit()` | `RML_COMM_Log_Init()` |
+| `RML_COMM_LogMsg()` | `RML_COMM_Log_Msg()` |
+| `RML_COMM_LogLevelSet()` | `RML_COMM_Log_SetLevel()` |
+| `RML_COMM_EnableColorLogs()` | `RML_COMM_Log_EnableColor()` |
 | `RML_COMM_LogStackUsage()` | `RML_COMM_Debug_LogStackUsage()` |
 | `RML_COMM_utoa()` | `RML_COMM_String_utoa()` |
 | `RML_COMM_itoa()` | `RML_COMM_String_itoa()` |
@@ -123,43 +136,8 @@ All functions have been renamed to follow `RML_COMM_<Group>_<Function>` naming c
 | `RML_COMM_SetupArduinoOTA()` | `RML_COMM_OTA_Setup()` |
 | `RML_COMM_HandleArduinoOTA()` | `RML_COMM_OTA_Handle()` |
 | `RML_COMM_LED_SetLEDColor()` | `RML_COMM_LED_SetColor()` |
-| `_RML_COMM_Assert()` | `_RML_COMM_Assert_Handler()` |
 
-**Note:** `RML_COMM_printf()` and `RML_COMM_vprintf()` retain their names as they follow the well-known printf convention.
-
-#### New Features
-
-**Assert Callback Support:**
-- New `RML_COMM_Assert_SetCallback()` function allows registering a user callback that executes before the infinite loop on assertion failure
-- Assert macro now captures and logs the failed expression string
-- Callback receives file name, line number, and expression string
-
-```cpp
-void MyAssertCallback(const char* FileName, uint32_t LineNumber, const char* Expression)
-{
-    // Custom handling before system halts (e.g., save state, notify user)
-    RML_COMM_Logger_Msg("Assert", e_WARNING, "Callback triggered!");
-}
-
-void setup()
-{
-    RML_COMM_Logger_Init(e_USB);
-    RML_COMM_Assert_SetCallback(MyAssertCallback);
-}
-```
-
-**WiFi Wrapper Functions:**
-- `RML_COMM_WiFi_Connect()` - Connect to WiFi with timeout, stores credentials for later reconnection
-- `RML_COMM_WiFi_Reconnect()` - Reconnect using stored credentials from previous `Connect()` call
-- `RML_COMM_WiFi_Disconnect()` - Clean disconnect from WiFi
-- `RML_COMM_WiFi_IsConnected()` - Check current connection status
-- All functions include automatic logging of connection status
-
-#### Other Changes
-- Added `#include <WiFi.h>` to header for WiFi functionality
-- Updated all examples with new function names
-- Created new `WiFi_Example.ino` demonstrating WiFi wrapper usage
-- Updated API reference documentation
+*Note: `RML_COMM_printf()` and `RML_COMM_vprintf()` unchanged.*
 
 ### v1.5:
 - Updated BLE logging to use the new `Remal_BLE_Serial` library API
