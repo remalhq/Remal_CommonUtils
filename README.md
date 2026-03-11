@@ -164,7 +164,8 @@ void loop()
 
 ## Changelog
 ### v3.0 (Breaking Changes) - RX Support Added!:
-- **Breaking:** UART `RML_COMM_Log_Init()` signature changed — now requires an `RX_Pin` parameter after `TX_Pin`. Pass `-1` to disable RX (TX-only mode).
+- **Breaking:** UART `RML_COMM_Log_Init()` signature changed — now requires an `RX_Pin` parameter after `TX_Pin`. Pass `-1` to disable RX (TX-only mode)
+- Updated `Logger_FullDemo_UART.ino` for new init signature
 - Added RX (input) functions for receiving data across all three protocols (USB, UART, BLE):
     - `RML_COMM_RX_Available()` - Check if data is available to read
     - `RML_COMM_RX_Read()` - Read available data into a buffer
@@ -180,8 +181,7 @@ void loop()
     - `RX_Example_USB.ino`
     - `RX_Example_UART.ino`
     - `RX_Example_BluetoothLE.ino`
-- Updated `Logger_FullDemo_UART.ino` for new init signature
-- Version bumped to 3.0
+
 
 **Migration (v2.0 → v3.0):**
 
