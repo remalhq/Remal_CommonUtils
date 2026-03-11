@@ -68,6 +68,7 @@ static inline void USB_puts(const char* s)
 
 // --- UART backend (ESP-IDF driver) ---
 static uart_port_t SelectedUARTPort = UART_NUM_0;			// Used to store the selected UART port for logging, defaults to UART_NUM_0
+static uint8_t UART_RX_Configured = 0;						// Flag: set to 1 if RX pin was configured during UART init
 static inline void UART_putc(char c)
 {
 	uart_write_bytes(SelectedUARTPort, &c, 1);
@@ -97,6 +98,153 @@ static inline void BLE_puts(const char* s)
     {
         BT_Device.Send_Data(s);
     }
+}
+
+
+/*********************************************
+ * Function Pointers for RX backend
+ *********************************************/
+static int32_t (*Main_rx_available)() = nullptr;					// Function pointer for RX available check
+static int32_t (*Main_rx_read)(char* Buffer, size_t BufferSize) = nullptr;	// Function pointer for RX read
+static void    (*Main_rx_flush)() = nullptr;						// Function pointer for RX flush
+
+
+/*********************************************
+ * RX State Variables
+ *********************************************/
+static SemaphoreHandle_t RX_Mutex = nullptr;		// Mutex to protect RX operations (separate from LogMutex)
+static RXCallback_t UserRXCallback = nullptr;		// User-defined callback for RX data arrival
+static TaskHandle_t RX_TaskHandle = nullptr;		// Handle for RX monitor background task
+
+// BLE residual buffer for ReadUntil — stores leftover data between calls
+static char BLE_ResidualBuffer[256] = {0};
+static size_t BLE_ResidualLen = 0;
+
+// Forward declaration for RX monitor task
+static void RX_MonitorTask(void* pvParameters);
+
+
+// --- USB-CDC RX backend ---
+static int32_t USB_rx_available()
+{
+	return (int32_t)Serial.available();
+}
+
+static int32_t USB_rx_read(char* Buffer, size_t BufferSize)
+{
+	int Available = Serial.available();
+	if (Available <= 0)
+	{
+		Buffer[0] = '\0';
+		return 0;
+	}
+
+	size_t ToRead = (size_t)Available;
+	if (ToRead >= BufferSize)
+	{
+		ToRead = BufferSize - 1;
+	}
+
+	size_t BytesRead = Serial.readBytes(Buffer, ToRead);
+	Buffer[BytesRead] = '\0';
+	return (int32_t)BytesRead;
+}
+
+static void USB_rx_flush()
+{
+	while (Serial.available())
+	{
+		Serial.read();
+	}
+}
+
+
+// --- UART RX backend ---
+static int32_t UART_rx_available()
+{
+	if (!UART_RX_Configured)
+	{
+		return -1;
+	}
+
+	size_t BufferedLen = 0;
+	if (uart_get_buffered_data_len(SelectedUARTPort, &BufferedLen) != ESP_OK)
+	{
+		return -1;
+	}
+	return (int32_t)BufferedLen;
+}
+
+static int32_t UART_rx_read(char* Buffer, size_t BufferSize)
+{
+	if (!UART_RX_Configured)
+	{
+		Buffer[0] = '\0';
+		return -1;
+	}
+
+	size_t BufferedLen = 0;
+	uart_get_buffered_data_len(SelectedUARTPort, &BufferedLen);
+	if (BufferedLen == 0)
+	{
+		Buffer[0] = '\0';
+		return 0;
+	}
+
+	size_t ToRead = BufferedLen;
+	if (ToRead >= BufferSize)
+	{
+		ToRead = BufferSize - 1;
+	}
+
+	int BytesRead = uart_read_bytes(SelectedUARTPort, Buffer, ToRead, 0);
+	if (BytesRead < 0)
+	{
+		Buffer[0] = '\0';
+		return -1;
+	}
+
+	Buffer[BytesRead] = '\0';
+	return (int32_t)BytesRead;
+}
+
+static void UART_rx_flush()
+{
+	if (UART_RX_Configured)
+	{
+		uart_flush_input(SelectedUARTPort);
+	}
+}
+
+
+// --- BLE RX backend ---
+static int32_t BLE_rx_available()
+{
+	return (int32_t)BT_Device.Data_Available();
+}
+
+static int32_t BLE_rx_read(char* Buffer, size_t BufferSize)
+{
+	int Result = BT_Device.Get_Data(Buffer, BufferSize);
+	if (Result < 0)
+	{
+		Buffer[0] = '\0';
+		return -1;
+	}
+	return (int32_t)Result;
+}
+
+static void BLE_rx_flush()
+{
+	char Temp[128];
+	while (BT_Device.Data_Available() > 0)
+	{
+		BT_Device.Get_Data(Temp, sizeof(Temp));
+	}
+
+	// Also clear the BLE residual buffer used by ReadUntil
+	BLE_ResidualLen = 0;
+	BLE_ResidualBuffer[0] = '\0';
 }
 
 
@@ -170,10 +318,21 @@ int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol)
 	Main_putc = &USB_putc;
 	Main_puts = &USB_puts;
 
-	/* Create mutex */
+	/*
+	 * Set function pointers for RX backend:
+	 */
+	Main_rx_available = &USB_rx_available;
+	Main_rx_read      = &USB_rx_read;
+	Main_rx_flush     = &USB_rx_flush;
+
+	/* Create mutexes */
 	if (LogMutex == NULL)
 	{
 		LogMutex = xSemaphoreCreateMutex();
+	}
+	if (RX_Mutex == NULL)
+	{
+		RX_Mutex = xSemaphoreCreateMutex();
 	}
 
 	/* Logger was init successfully */
@@ -185,7 +344,7 @@ int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol)
 
 
 
-int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Baudrate, uart_port_t UART_Num)
+int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, int8_t RX_Pin, uint32_t Baudrate, uart_port_t UART_Num)
 {
 	/* Error check:
 	 * Verify the LoggingProtocol is valid for the function */
@@ -235,19 +394,21 @@ int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Baudr
 		return -1;
 	}
 
-	// Set UART pins
-	if( uart_set_pin(UART_Num, TX_Pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK )
+	// Set UART pins — RX_Pin of -1 means RX is disabled (TX-only mode)
+	int RX_PinDriver = (RX_Pin == -1) ? UART_PIN_NO_CHANGE : (int)RX_Pin;
+	if( uart_set_pin(UART_Num, TX_Pin, RX_PinDriver, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK )
 	{
 		return -1;
 	}
 
-	// Install UART driver with RX and TX buffers even though RX is not used for logging but required by the driver
+	// Install UART driver with RX and TX buffers (RX buffer required by the driver even if RX is not used)
 	if( uart_driver_install(UART_Num, /*rx*/256, /*tx*/2048, /*queue*/0, NULL, 0) != ESP_OK )
 	{
 		return -1;
 	}
 
 	SelectedUARTPort = UART_Num;			// Store the selected UART port for logging
+	UART_RX_Configured = (RX_Pin != -1) ? 1 : 0;		// Track if RX pin was configured
 
 	/*
 	 * Set function pointers for logging backend:
@@ -255,10 +416,21 @@ int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Baudr
 	Main_putc = &UART_putc;
 	Main_puts = &UART_puts;
 
-	/* Create mutex */
+	/*
+	 * Set function pointers for RX backend:
+	 */
+	Main_rx_available = &UART_rx_available;
+	Main_rx_read      = &UART_rx_read;
+	Main_rx_flush     = &UART_rx_flush;
+
+	/* Create mutexes */
 	if (LogMutex == NULL)
 	{
 		LogMutex = xSemaphoreCreateMutex();
+	}
+	if (RX_Mutex == NULL)
+	{
+		RX_Mutex = xSemaphoreCreateMutex();
 	}
 
 	/* Logger was init successfully */
@@ -304,13 +476,24 @@ int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, const char* BT_Name)
 	Main_putc = &BLE_putc;
 	Main_puts = &BLE_puts;
 
+	/*
+	 * Set function pointers for RX backend:
+	 */
+	Main_rx_available = &BLE_rx_available;
+	Main_rx_read      = &BLE_rx_read;
+	Main_rx_flush     = &BLE_rx_flush;
+
 	/* Disable colored logs for BT */
 	RML_COMM_Log_EnableColor(0);
 
-	/* Create mutex */
+	/* Create mutexes */
 	if (LogMutex == NULL)
 	{
 		LogMutex = xSemaphoreCreateMutex();
+	}
+	if (RX_Mutex == NULL)
+	{
+		RX_Mutex = xSemaphoreCreateMutex();
 	}
 
 	/* Logger was init successfully */
@@ -1443,4 +1626,349 @@ int8_t RML_COMM_LED_SetPixels(Adafruit_NeoPixel &LED_Obj, uint16_t StartIndex, u
 	vTaskDelay(pdMS_TO_TICKS(1));
 
 	return 0;
+}
+
+
+
+/**********************************************************************************************************************************
+ * 												<!-- RX (Input) Functions -->
+ **********************************************************************************************************************************/
+
+int32_t RML_COMM_RX_Available()
+{
+	/* Error check: Logger must be initialized */
+	if (!Logger_InitDone || Main_rx_available == nullptr)
+	{
+		return -1;
+	}
+
+	int32_t Result = -1;
+
+	if (xSemaphoreTake(RX_Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+	{
+		Result = Main_rx_available();
+		xSemaphoreGive(RX_Mutex);
+	}
+
+	return Result;
+}
+
+
+
+int32_t RML_COMM_RX_Read(char* Buffer, size_t BufferSize)
+{
+	/* Error check: Validate parameters and state */
+	if (Buffer == NULL || BufferSize < 2)
+	{
+		return -1;
+	}
+
+	if (!Logger_InitDone || Main_rx_read == nullptr)
+	{
+		Buffer[0] = '\0';
+		return -1;
+	}
+
+	int32_t Result = -1;
+
+	if (xSemaphoreTake(RX_Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+	{
+		Result = Main_rx_read(Buffer, BufferSize);
+		xSemaphoreGive(RX_Mutex);
+	}
+	else
+	{
+		Buffer[0] = '\0';
+	}
+
+	return Result;
+}
+
+
+
+int32_t RML_COMM_RX_ReadUntil(char* Buffer, size_t BufferSize, char Terminator, uint32_t TimeoutMs)
+{
+	/* Error check: Validate parameters and state */
+	if (Buffer == NULL || BufferSize < 2)
+	{
+		return -1;
+	}
+
+	if (!Logger_InitDone)
+	{
+		Buffer[0] = '\0';
+		return -1;
+	}
+
+	int32_t BytesRead = 0;
+
+	if (xSemaphoreTake(RX_Mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+	{
+		Buffer[0] = '\0';
+		return -1;
+	}
+
+	TickType_t StartTick = xTaskGetTickCount();
+	TickType_t TimeoutTicks = pdMS_TO_TICKS(TimeoutMs);
+
+	if (CurrentLogProtocol == e_BLE)
+	{
+		/*
+		 * BLE path: Check residual buffer first, then pull new messages
+		 */
+
+		// Check residual buffer for terminator
+		for (size_t i = 0; i < BLE_ResidualLen; i++)
+		{
+			if (BLE_ResidualBuffer[i] == Terminator)
+			{
+				// Found terminator in residual — copy up to (not including) terminator
+				size_t CopyLen = i;
+				if (CopyLen >= BufferSize)
+				{
+					CopyLen = BufferSize - 1;
+				}
+				memcpy(Buffer, BLE_ResidualBuffer, CopyLen);
+				Buffer[CopyLen] = '\0';
+
+				// Shift remainder in residual buffer (skip the terminator)
+				size_t Remaining = BLE_ResidualLen - i - 1;
+				if (Remaining > 0)
+				{
+					memmove(BLE_ResidualBuffer, &BLE_ResidualBuffer[i + 1], Remaining);
+				}
+				BLE_ResidualLen = Remaining;
+				BLE_ResidualBuffer[BLE_ResidualLen] = '\0';
+
+				xSemaphoreGive(RX_Mutex);
+				return (int32_t)CopyLen;
+			}
+		}
+
+		// No terminator in residual — pull new BLE messages until found or timeout
+		while ((xTaskGetTickCount() - StartTick) < TimeoutTicks)
+		{
+			if (BT_Device.Data_Available() > 0)
+			{
+				char TempMsg[128];
+				int MsgLen = BT_Device.Get_Data(TempMsg, sizeof(TempMsg));
+				if (MsgLen > 0)
+				{
+					// Append to residual buffer (clamp to avoid overflow)
+					size_t SpaceLeft = sizeof(BLE_ResidualBuffer) - BLE_ResidualLen - 1;
+					size_t AppendLen = ((size_t)MsgLen < SpaceLeft) ? (size_t)MsgLen : SpaceLeft;
+					if (AppendLen > 0)
+					{
+						memcpy(&BLE_ResidualBuffer[BLE_ResidualLen], TempMsg, AppendLen);
+						BLE_ResidualLen += AppendLen;
+						BLE_ResidualBuffer[BLE_ResidualLen] = '\0';
+					}
+
+					// Scan residual for terminator
+					for (size_t i = 0; i < BLE_ResidualLen; i++)
+					{
+						if (BLE_ResidualBuffer[i] == Terminator)
+						{
+							size_t CopyLen = i;
+							if (CopyLen >= BufferSize)
+							{
+								CopyLen = BufferSize - 1;
+							}
+							memcpy(Buffer, BLE_ResidualBuffer, CopyLen);
+							Buffer[CopyLen] = '\0';
+
+							// Shift remainder
+							size_t Remaining = BLE_ResidualLen - i - 1;
+							if (Remaining > 0)
+							{
+								memmove(BLE_ResidualBuffer, &BLE_ResidualBuffer[i + 1], Remaining);
+							}
+							BLE_ResidualLen = Remaining;
+							BLE_ResidualBuffer[BLE_ResidualLen] = '\0';
+
+							xSemaphoreGive(RX_Mutex);
+							return (int32_t)CopyLen;
+						}
+					}
+				}
+			}
+			else
+			{
+				vTaskDelay(pdMS_TO_TICKS(1));
+			}
+		}
+
+		// Timeout — return whatever is in the residual buffer
+		if (BLE_ResidualLen > 0)
+		{
+			size_t CopyLen = BLE_ResidualLen;
+			if (CopyLen >= BufferSize)
+			{
+				CopyLen = BufferSize - 1;
+			}
+			memcpy(Buffer, BLE_ResidualBuffer, CopyLen);
+			Buffer[CopyLen] = '\0';
+
+			// Shift remainder if we couldn't copy everything
+			size_t Remaining = BLE_ResidualLen - CopyLen;
+			if (Remaining > 0)
+			{
+				memmove(BLE_ResidualBuffer, &BLE_ResidualBuffer[CopyLen], Remaining);
+			}
+			BLE_ResidualLen = Remaining;
+			BLE_ResidualBuffer[BLE_ResidualLen] = '\0';
+
+			xSemaphoreGive(RX_Mutex);
+			return (int32_t)CopyLen;
+		}
+
+		Buffer[0] = '\0';
+		xSemaphoreGive(RX_Mutex);
+		return 0;
+	}
+	else if (CurrentLogProtocol == e_UART)
+	{
+		/*
+		 * UART path: Use uart_read_bytes with small tick timeout per byte
+		 */
+		if (!UART_RX_Configured)
+		{
+			Buffer[0] = '\0';
+			xSemaphoreGive(RX_Mutex);
+			return -1;
+		}
+
+		BytesRead = 0;
+		while ((xTaskGetTickCount() - StartTick) < TimeoutTicks)
+		{
+			char c;
+			int Read = uart_read_bytes(SelectedUARTPort, &c, 1, pdMS_TO_TICKS(10));
+			if (Read > 0)
+			{
+				if (c == Terminator)
+				{
+					Buffer[BytesRead] = '\0';
+					xSemaphoreGive(RX_Mutex);
+					return BytesRead;
+				}
+
+				Buffer[BytesRead++] = c;
+				if ((size_t)BytesRead >= BufferSize - 1)
+				{
+					Buffer[BytesRead] = '\0';
+					xSemaphoreGive(RX_Mutex);
+					return BytesRead;
+				}
+			}
+			// uart_read_bytes already waited 10ms if no data — no extra delay needed
+		}
+
+		Buffer[BytesRead] = '\0';
+		xSemaphoreGive(RX_Mutex);
+		return 0;
+	}
+	else
+	{
+		/*
+		 * USB path: Read byte-by-byte with vTaskDelay between attempts
+		 */
+		BytesRead = 0;
+		while ((xTaskGetTickCount() - StartTick) < TimeoutTicks)
+		{
+			if (Serial.available() > 0)
+			{
+				char c = (char)Serial.read();
+				if (c == Terminator)
+				{
+					Buffer[BytesRead] = '\0';
+					xSemaphoreGive(RX_Mutex);
+					return BytesRead;
+				}
+
+				Buffer[BytesRead++] = c;
+				if ((size_t)BytesRead >= BufferSize - 1)
+				{
+					Buffer[BytesRead] = '\0';
+					xSemaphoreGive(RX_Mutex);
+					return BytesRead;
+				}
+			}
+			else
+			{
+				vTaskDelay(pdMS_TO_TICKS(1));
+			}
+		}
+
+		Buffer[BytesRead] = '\0';
+		xSemaphoreGive(RX_Mutex);
+		return 0;
+	}
+}
+
+
+
+void RML_COMM_RX_Flush()
+{
+	/* Error check: Logger must be initialized */
+	if (!Logger_InitDone || Main_rx_flush == nullptr)
+	{
+		return;
+	}
+
+	if (xSemaphoreTake(RX_Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+	{
+		Main_rx_flush();
+		xSemaphoreGive(RX_Mutex);
+	}
+}
+
+
+
+int8_t RML_COMM_RX_SetCallback(RXCallback_t Callback)
+{
+	/* Error check: Logger must be initialized */
+	if (!Logger_InitDone)
+	{
+		return -1;
+	}
+
+	UserRXCallback = Callback;
+
+	/* Create the RX monitor task if it doesn't exist yet and callback is non-null */
+	if (Callback != nullptr && RX_TaskHandle == nullptr)
+	{
+		xTaskCreate(
+			RX_MonitorTask,
+			"RX_Monitor",
+			2048,
+			NULL,
+			1,
+			&RX_TaskHandle
+		);
+	}
+
+	return 0;
+}
+
+
+
+/**
+ * @brief RX Monitor background task.
+ *        Polls for available RX data at 50ms intervals and calls the user callback when data is detected.
+ */
+static void RX_MonitorTask(void* pvParameters)
+{
+	(void)pvParameters;
+
+	while (1)
+	{
+		if (UserRXCallback != nullptr && Main_rx_available != nullptr)
+		{
+			if (Main_rx_available() > 0)
+			{
+				UserRXCallback();
+			}
+		}
+		vTaskDelay(pdMS_TO_TICKS(50));
+	}
 }

@@ -1,16 +1,16 @@
 /**
  * @file 		Remal_CommonUtils.h
  * @author 		Khalid Mansoor AlAwadhi, Remal <khalid@remal.io>
- * @date 		Feb 6 2026 (Initial release - 14 May 2020)
- * @version		2.0
+ * @date 		Mar 11 2026 (Initial release - 14 May 2020)
+ * @version		3.0
  *
  * @brief   	This library provides various tools and utilities to be used
  * 				on Remal hardware.
  *
  * @note		Refer to the README.md file for more information about this library.
  *
- * @warning		v2.0 is a breaking change release. All function names have been updated
- * 				to follow the RML_COMM_<Group>_<Function> naming convention.
+ * @warning		v3.0 is a breaking change release. UART init signature now requires an RX_Pin
+ * 				parameter. Added RX (input) functions: RML_COMM_RX_*.
 **/
 #ifndef _REMAL_COMMONUTILS_H_
 #define _REMAL_COMMONUTILS_H_
@@ -130,6 +130,12 @@ typedef enum
  */
 typedef void (*AssertCallback_t)(const char* FileName, uint32_t LineNumber, const char* Expression);
 
+/**
+ * @brief RX callback function pointer type.
+ * Called when data is received on the active protocol.
+ */
+typedef void (*RXCallback_t)(void);
+
 
 
 
@@ -173,7 +179,10 @@ int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol = e_USB);
  * 				- e_BLE
  *
  * @param[in] TX_Pin
- * 			The TX pin to use for UART logging
+ * 			The TX pin to use for UART logging. Must be a valid GPIO pin.
+ *
+ * @param[in] RX_Pin
+ * 			The RX pin to use for UART input. Pass -1 to disable RX (TX-only mode).
  *
  * @param[in] Baudrate
  * 			The baudrate to use for UART logging
@@ -186,7 +195,7 @@ int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol = e_USB);
  * @return
  * 			0 on success, -1 on failure
  ************************************************************************************************************************/
-int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, uint32_t Baudrate, uart_port_t UART_Num = UART_NUM_0);
+int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, int8_t RX_Pin, uint32_t Baudrate, uart_port_t UART_Num = UART_NUM_0);
 
 
 
@@ -737,6 +746,107 @@ void RML_COMM_LED_SetBrightness(Adafruit_NeoPixel &LED_Obj, uint8_t Brightness);
  ************************************************************************************************************************/
 int8_t RML_COMM_LED_SetPixels(Adafruit_NeoPixel &LED_Obj, uint16_t StartIndex, uint8_t Red, uint8_t Green, uint8_t Blue, uint16_t Count = 1);
 
+
+
+
+/**********************************************************************************************************************************
+ * 												<!-- RX (Input) Functions -->
+ **********************************************************************************************************************************/
+/************************************************************************************************************************
+ * @brief	Checks if there is data available to read from the current protocol.
+ *
+ *
+ * @return
+ * 			> 0: Number of bytes (USB/UART) or messages (BLE) available
+ * 			  0: No data available, but protocol is ready
+ * 			 -1: Protocol not initialized or not ready (e.g., BLE disconnected, UART RX not configured)
+ ************************************************************************************************************************/
+int32_t RML_COMM_RX_Available();
+
+
+
+/************************************************************************************************************************
+ * @brief	Reads received data into the provided buffer. Reads whatever is currently
+ * 			available, up to BufferSize - 1 bytes. The buffer is always null-terminated.
+ *
+ *
+ * @param[out] Buffer
+ * 			Pointer to the buffer where received data will be stored
+ *
+ * @param[in] BufferSize
+ * 			Size of the buffer in bytes (must be >= 2)
+ *
+ * @return
+ * 			> 0: Number of bytes actually read (not counting null terminator)
+ * 			  0: No data was available
+ * 			 -1: Error (NULL buffer, BufferSize too small, protocol not initialized)
+ ************************************************************************************************************************/
+int32_t RML_COMM_RX_Read(char* Buffer, size_t BufferSize);
+
+
+
+/************************************************************************************************************************
+ * @brief	Reads data until the specified terminator character is found, or until
+ * 			the buffer is full, or until the timeout expires — whichever comes first.
+ * 			The terminator character is NOT included in the buffer.
+ * 			The buffer is always null-terminated.
+ *
+ * @note	Uses vTaskDelay() internally for FreeRTOS-friendly timeout handling.
+ * 			For UART, the RX pin must have been configured during RML_COMM_Log_Init().
+ *
+ *
+ * @param[out] Buffer
+ * 			Pointer to the buffer where received data will be stored
+ *
+ * @param[in] BufferSize
+ * 			Size of the buffer in bytes (must be >= 2)
+ *
+ * @param[in] Terminator
+ * 			The character to read until (default: '\\n')
+ *
+ * @param[in] TimeoutMs
+ * 			Timeout in milliseconds to wait for data (default: 1000)
+ *
+ * @return
+ * 			> 0: Number of bytes read (terminator found or buffer full)
+ * 			  0: Timeout expired with no data or no terminator found
+ * 			 -1: Error (NULL buffer, protocol not initialized)
+ ************************************************************************************************************************/
+int32_t RML_COMM_RX_ReadUntil(char* Buffer, size_t BufferSize, char Terminator = '\n', uint32_t TimeoutMs = 1000);
+
+
+
+/************************************************************************************************************************
+ * @brief	Clears/flushes any pending received data from the RX buffer.
+ *
+ *
+ * @return
+ * 			None
+ ************************************************************************************************************************/
+void RML_COMM_RX_Flush();
+
+
+
+/************************************************************************************************************************
+ * @brief	Registers a user callback function that is called when data is received.
+ * 			The callback runs in the context of a dedicated RX monitoring task that
+ * 			polls at 50ms intervals.
+ *
+ * @note	The callback should be short and non-blocking. For heavy processing,
+ * 			use the callback to signal a semaphore or set a flag, then process
+ * 			in your main task.
+ *
+ * 			Pass NULL to disable the callback. The monitoring task remains running
+ * 			but does nothing when the callback is NULL.
+ *
+ *
+ * @param[in] Callback
+ * 			Function pointer to the user callback. Signature: void (*)(void)
+ *
+ * @return
+ * 			0 on success, -1 if protocol not initialized
+ ************************************************************************************************************************/
+int8_t RML_COMM_RX_SetCallback(RXCallback_t Callback);
 
 
 

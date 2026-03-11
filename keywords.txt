@@ -8,6 +8,7 @@
 LogLevel_Enum	KEYWORD1
 LogProtocol_Enum	KEYWORD1
 AssertCallback_t	KEYWORD1
+RXCallback_t	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -36,6 +37,11 @@ RML_COMM_LED_SetBrightness	KEYWORD2
 RML_COMM_LED_SetPixels	KEYWORD2
 RML_COMM_Assert_SetCallback	KEYWORD2
 RML_COMM_ASSERT	KEYWORD2
+RML_COMM_RX_Available	KEYWORD2
+RML_COMM_RX_Read	KEYWORD2
+RML_COMM_RX_ReadUntil	KEYWORD2
+RML_COMM_RX_Flush	KEYWORD2
+RML_COMM_RX_SetCallback	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)

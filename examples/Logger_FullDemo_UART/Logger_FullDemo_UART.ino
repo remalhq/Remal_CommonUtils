@@ -14,7 +14,8 @@
 int MessageDelay_ms = 2000;                 // Delay between log messages in milliseconds
 
 /* UART Configuration */
-const int TX_Pin = 6;                       // UART TX Pin (RX pin is not needed for logging)
+const int TX_Pin = 6;                       // UART TX Pin
+const int RX_Pin = -1;                      // UART RX Pin (-1 to disable RX, set to a valid GPIO to enable RX input)
 const int Baudrate = 115200;                // UART Baudrate
 const uart_port_t UART_Num = UART_NUM_0;    // UART Port Number (By default UART_NUM_0 is used, you can also use UART_NUM_1)
 
@@ -33,7 +34,7 @@ void setup()
     RML_COMM_LED_Init(Shabakah_LED_2, LED_Brightness);
 
     /* Initialize the logger using UART */
-    if( RML_COMM_Log_Init(e_UART, TX_Pin, Baudrate, UART_Num) != 0 )
+    if( RML_COMM_Log_Init(e_UART, TX_Pin, RX_Pin, Baudrate, UART_Num) != 0 )
     {
         // Logger initialization failed, blink LED RED to indicate error
         while(1)

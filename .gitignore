@@ -1,14 +1,40 @@
-#####################################################
+######################################
 # This file is used to ignore files and directories
 # that should not be tracked by Git.
-####################################################
+######################################
 
 # VSCode settings
 .vscode/
 
+# Agents
+.claude/
+
 # MacOS Finder junk
 .DS_Store
 
-# General Files
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Private/credentials folder
+src/private/
+private/
+
+# Credentials and secrets (fallback if not using private/ folder)
 WifiCreds.h
-Private/
+*Creds.h
+secrets.h
+*.key
+*.pem
+
+# Build artifacts
+Tmp/
+*.bin
+*.elf
+*.hex
+
+# IDE specific
+*.swp
+*.swo
+*~

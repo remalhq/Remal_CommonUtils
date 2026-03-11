@@ -7,17 +7,18 @@ The **Remal Common Utilities** library provides a set of essential tools and uti
 
 
 ## Features
-- **Logging**: Supports logging on Remal Shabakah boards via various protocols with multiple log levels and optional colored output: 
+- **Logging (TX)**: Supports logging on Remal Shabakah boards via various protocols with multiple log levels and optional colored output:
     - Protocols:
         - `USB CDC`: Default logging protocol, requires USB CDC to be enabled.
         - `UART`: Logs messages over UART
         - `Bluetooth Low Energy (BLE)`: Logs messages over BLE using the `Remal_BLE_Serial` library.
     - Log Levels:
         - 🟦 `DEBUG`: Cyan
-        - 🟩 `INFO`: Green  
-        - 🟨 `WARNING`: Yellow  
-        - 🟥 `ERROR`: Red  
+        - 🟩 `INFO`: Green
+        - 🟨 `WARNING`: Yellow
+        - 🟥 `ERROR`: Red
         - ⬜🟥 `FATAL`: Red on White Background
+- **Input (RX)**: Receive data from the active protocol (USB, UART, or BLE). Includes polling, line-based reading with timeout, buffer flushing, and an optional callback for data arrival notifications.
 - **Assert Handling**: Customizable assert function to handle errors with detailed file, line number, and expression reporting. Supports user-defined callbacks for custom error handling.
 - **WiFi Wrapper Functions**: Simplified WiFi connection management with automatic credential storage, timeout support, and reconnection capabilities.
 - **Lightweight `printf()` Implementation**: Optimized for embedded systems, reducing overhead while maintaining functionality.
@@ -103,8 +104,91 @@ void loop()
 }
 ```
 
+## Example Usage (RX Input - USB)
+```cpp
+#include <Remal_CommonUtils.h>
+
+void setup()
+{
+    RML_COMM_Log_Init(e_USB);
+    RML_COMM_Log_Msg("Main", e_INFO, "Type something in the Serial Monitor!");
+}
+
+void loop()
+{
+    if (RML_COMM_RX_Available() > 0)
+    {
+        char Buffer[128];
+        int32_t BytesRead = RML_COMM_RX_Read(Buffer, sizeof(Buffer));
+        if (BytesRead > 0)
+        {
+            RML_COMM_Log_Msg("RX", e_INFO, "Received: %s", Buffer);
+        }
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+}
+```
+
+## Example Usage (RX Input - ReadUntil with Callback)
+```cpp
+#include <Remal_CommonUtils.h>
+
+volatile bool DataReady = false;
+
+void OnDataReceived()
+{
+    DataReady = true;
+}
+
+void setup()
+{
+    RML_COMM_Log_Init(e_USB);
+    RML_COMM_RX_SetCallback(OnDataReceived);
+}
+
+void loop()
+{
+    if (DataReady)
+    {
+        DataReady = false;
+        char Line[128];
+        int32_t Len = RML_COMM_RX_ReadUntil(Line, sizeof(Line), '\n', 500);
+        if (Len > 0)
+        {
+            RML_COMM_Log_Msg("RX", e_INFO, "Line: %s", Line);
+        }
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+}
+```
+
 ## Changelog
-### v2.0 (Breaking Changes):
+### v3.0 (Breaking Changes) - RX Support Added!:
+- **Breaking:** UART `RML_COMM_Log_Init()` signature changed — now requires an `RX_Pin` parameter after `TX_Pin`. Pass `-1` to disable RX (TX-only mode).
+- Added RX (input) functions for receiving data across all three protocols (USB, UART, BLE):
+    - `RML_COMM_RX_Available()` - Check if data is available to read
+    - `RML_COMM_RX_Read()` - Read available data into a buffer
+    - `RML_COMM_RX_ReadUntil()` - Read until a terminator character with timeout
+    - `RML_COMM_RX_Flush()` - Clear pending RX data
+    - `RML_COMM_RX_SetCallback()` - Register a callback for data arrival (runs in a background FreeRTOS task)
+- Added `RXCallback_t` typedef for RX callback function pointers
+- RX uses a separate mutex (`RX_Mutex`) from TX logging (`LogMutex`) so reads don't block log output
+- BLE `ReadUntil` uses an internal residual buffer for proper line parsing across discrete BLE messages
+- All timeout handling uses `vTaskDelay()` and `xTaskGetTickCount()` for FreeRTOS compatibility
+- Created new `RX_Example.ino` example
+- Updated `Logger_FullDemo_UART.ino` for new init signature
+- Version bumped to 3.0
+
+**Migration (v2.0 → v3.0):**
+
+| v2.0 Call | v3.0 Call |
+|-----------|-----------|
+| `RML_COMM_Log_Init(e_UART, TX_Pin, Baudrate)` | `RML_COMM_Log_Init(e_UART, TX_Pin, -1, Baudrate)` |
+| `RML_COMM_Log_Init(e_UART, TX_Pin, Baudrate, UART_Num)` | `RML_COMM_Log_Init(e_UART, TX_Pin, -1, Baudrate, UART_Num)` |
+
+*Note: USB and BLE init calls are unchanged.*
+
+### v2.0 (Breaking Changes) - BIG Changes!:
 - **Breaking:** All functions renamed to `RML_COMM_<Group>_<Function>` convention for better organization and autocomplete. See migration table below.
 - **Breaking:** `RML_ASSERT` renamed to `RML_COMM_ASSERT`, `RML_ASSERT_ENABLE` renamed to `RML_COMM_ASSERT_ENABLE`
 - Added `RML_COMM_Assert_SetCallback()` to register a callback that executes before halt on assertion failure
