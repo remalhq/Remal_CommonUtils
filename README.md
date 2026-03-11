@@ -175,7 +175,11 @@ void loop()
 - RX uses a separate mutex (`RX_Mutex`) from TX logging (`LogMutex`) so reads don't block log output
 - BLE `ReadUntil` uses an internal residual buffer for proper line parsing across discrete BLE messages
 - All timeout handling uses `vTaskDelay()` and `xTaskGetTickCount()` for FreeRTOS compatibility
-- Created new `RX_Example.ino` example
+- Replaced legacy single RX example with protocol-specific examples
+- Added protocol-specific RX examples:
+    - `RX_Example_USB.ino`
+    - `RX_Example_UART.ino`
+    - `RX_Example_BluetoothLE.ino`
 - Updated `Logger_FullDemo_UART.ino` for new init signature
 - Version bumped to 3.0
 
