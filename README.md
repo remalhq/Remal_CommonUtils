@@ -125,7 +125,7 @@ void loop()
             RML_COMM_Log_Msg("RX", e_INFO, "Received: %s", Buffer);
         }
     }
-    vTaskDelay(pdMS_TO_TICKS(10));
+    delay(10);
 }
 ```
 
@@ -158,7 +158,7 @@ void loop()
             RML_COMM_Log_Msg("RX", e_INFO, "Line: %s", Line);
         }
     }
-    vTaskDelay(pdMS_TO_TICKS(10));
+    delay(10);
 }
 ```
 
@@ -175,7 +175,7 @@ void loop()
 - Added `RXCallback_t` typedef for RX callback function pointers
 - RX uses a separate mutex (`RX_Mutex`) from TX logging (`LogMutex`) so reads don't block log output
 - BLE `ReadUntil` uses an internal residual buffer for proper line parsing across discrete BLE messages
-- All timeout handling uses `vTaskDelay()` and `xTaskGetTickCount()` for FreeRTOS compatibility
+- All timeout handling uses FreeRTOS-friendly internal timing for ESP32 compatibility
 - Replaced legacy single RX example with protocol-specific examples
 - Added protocol-specific RX examples:
     - `RX_Example_USB.ino`
@@ -248,7 +248,7 @@ void loop()
 - Big rework of logger functions, `RML_COMM_LoggerInit()` now has different overloads to support different logging protocols => USB, UART, BLE
 - Removed usage of `PUTCHAR_FUNC` and `PUTCHAR_N_FUNC` defines
 - Created new internal functions `Main_putc()` and `Main_puts()` that dynamically get assigned based on the selected logging protocol backend at runtime
-- Updated `_RML_COMM_Assert()` to use `vTaskDelay(portMAX_DELAY)` instead of a busy-wait infinite loop to avoid CPU starvation
+- Updated `_RML_COMM_Assert()` to yield instead of busy-waiting in an infinite loop to avoid CPU starvation
 - Removed `#define ENABLE_COLOR_SUPPORT` and replaced its use with function call to enable/disable colored logs at runtime: `RML_COMM_EnableColorLogs()`
 - Updated log level colors to be bold and fatal log level to be red-on-white background
 - Added new ANSI color defines red-on-white background and white-on-red background: `ANSI_WHITEONREDBG` and `ANSI_REDONWHITEBG`
