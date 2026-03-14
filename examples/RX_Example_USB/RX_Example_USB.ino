@@ -19,7 +19,7 @@ void setup()
 	RML_COMM_Log_Init(e_USB);
 
 	/* Give the host time to enumerate USB CDC */
-	vTaskDelay(pdMS_TO_TICKS(2000));
+	delay(2000);
 
 	RML_COMM_Log_Msg("Main", e_INFO, "RX USB example started");
 	RML_COMM_Log_Msg("Main", e_INFO, "Type in Serial Monitor to test RX");
@@ -39,5 +39,5 @@ void loop()
 		}
 	}
 
-	vTaskDelay(pdMS_TO_TICKS(10));
+	delay(10);
 }

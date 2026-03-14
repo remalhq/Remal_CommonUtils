@@ -30,7 +30,7 @@ void setup()
 	{
 		while(1)
 		{
-			vTaskDelay(pdMS_TO_TICKS(1000));
+			delay(1000);
 		}
 	}
 
@@ -52,5 +52,5 @@ void loop()
 		}
 	}
 
-	vTaskDelay(pdMS_TO_TICKS(10));
+	delay(10);
 }

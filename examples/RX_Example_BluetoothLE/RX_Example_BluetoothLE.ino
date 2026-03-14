@@ -24,7 +24,7 @@ void setup()
 	{
 		while(1)
 		{
-			vTaskDelay(pdMS_TO_TICKS(1000));
+			delay(1000);
 		}
 	}
 
@@ -41,7 +41,7 @@ void setup()
 			break;
 		}
 
-		vTaskDelay(pdMS_TO_TICKS(50));
+		delay(50);
 	}
 
 	RML_COMM_Log_Msg("Main", e_INFO, "RX BLE example started");
@@ -76,5 +76,5 @@ void loop()
 		}
 	}
 
-	vTaskDelay(pdMS_TO_TICKS(20));
+	delay(20);
 }
