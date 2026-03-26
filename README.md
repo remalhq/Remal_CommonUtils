@@ -163,6 +163,18 @@ void loop()
 ```
 
 ## Changelog
+### v3.1 - Lock/Unlock LED Functions:
+- Added shared NeoPixel/RMT mutex protection across LED operations to prevent concurrent `show()` access from multiple tasks
+- Updated LED wrapper functions to automatically lock/unlock around hardware access:
+    - `RML_COMM_LED_Init()`
+    - `RML_COMM_LED_SetColor()`
+    - `RML_COMM_LED_Off()`
+    - `RML_COMM_LED_SetBrightness()`
+    - `RML_COMM_LED_SetPixels()`
+- Added internal-use lock helpers for advanced/direct NeoPixel usage paths:
+    - `_RML_COMM_LED_Lock()`
+    - `_RML_COMM_LED_Unlock()`
+
 ### v3.0 (Breaking Changes) - RX Support Added!:
 - **Breaking:** UART `RML_COMM_Log_Init()` signature changed — now requires an `RX_Pin` parameter after `TX_Pin`. Pass `-1` to disable RX (TX-only mode)
 - Updated `Logger_FullDemo_UART.ino` for new init signature

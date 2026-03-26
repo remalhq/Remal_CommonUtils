@@ -12,6 +12,7 @@
 static uint8_t Logger_InitDone = 0;					// This flag is set to true when RML_COMM_Log_Init() is called and is successful. Used for error handling
 static LogProtocol_Enum CurrentLogProtocol = e_USB;	// Tracks selected logging protocol
 static SemaphoreHandle_t LogMutex = nullptr;		// Mutex to protect logging from multiple tasks
+static SemaphoreHandle_t LED_Mutex = nullptr;		// Mutex to serialize NeoPixel/RMT access across tasks
 static uint8_t ColorLogsEnabled = false;			// Flag to indicate if colored logs are enabled
 static BLESerial BT_Device;							// BLE Serial object for BLE logging
 static const char DIGITS[] = "ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; 	// Used for itoa/utoa functions
@@ -122,6 +123,15 @@ static size_t BLE_ResidualLen = 0;
 
 // Forward declaration for RX monitor task
 static void RX_MonitorTask(void* pvParameters);
+
+
+static void RML_COMM_LED_EnsureMutex()
+{
+	if (LED_Mutex == NULL)
+	{
+		LED_Mutex = xSemaphoreCreateMutex();
+	}
+}
 
 
 // --- USB-CDC RX backend ---
@@ -334,6 +344,10 @@ int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol)
 	{
 		RX_Mutex = xSemaphoreCreateMutex();
 	}
+	if (LED_Mutex == NULL)
+	{
+		LED_Mutex = xSemaphoreCreateMutex();
+	}
 
 	/* Logger was init successfully */
 	Logger_InitDone = 1;
@@ -432,6 +446,10 @@ int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, uint8_t TX_Pin, int8_t RX_Pin,
 	{
 		RX_Mutex = xSemaphoreCreateMutex();
 	}
+	if (LED_Mutex == NULL)
+	{
+		LED_Mutex = xSemaphoreCreateMutex();
+	}
 
 	/* Logger was init successfully */
 	Logger_InitDone = 1;
@@ -494,6 +512,10 @@ int8_t RML_COMM_Log_Init(uint8_t LoggingProtocol, const char* BT_Name)
 	if (RX_Mutex == NULL)
 	{
 		RX_Mutex = xSemaphoreCreateMutex();
+	}
+	if (LED_Mutex == NULL)
+	{
+		LED_Mutex = xSemaphoreCreateMutex();
 	}
 
 	/* Logger was init successfully */
@@ -1231,10 +1253,10 @@ int8_t RML_COMM_WiFi_Connect(const char* SSID, const char* Password,
 			RML_COMM_Log_Msg(FuncName, e_INFO, "Connecting to %s...", SSID);
 		}
 
-		/* Ensure clean state before connecting */
-		WiFi.disconnect(true);				/* true = turn off WiFi radio completely */
-		vTaskDelay(pdMS_TO_TICKS(500));		/* Give WiFi driver time to fully reset */
-		WiFi.mode(WIFI_STA);				/* Set station mode */
+			/* Ensure clean state before connecting without forcing full Wi-Fi uninit */
+			WiFi.disconnect(false, false);
+			vTaskDelay(pdMS_TO_TICKS(180));
+			WiFi.mode(WIFI_STA);				/* Set station mode */
 
 		WiFi.begin(SSID, Password);
 
@@ -1272,8 +1294,8 @@ int8_t RML_COMM_WiFi_Connect(const char* SSID, const char* Password,
 			RML_COMM_Log_Msg(FuncName, e_ERROR, "Connection attempt timed out");
 		}
 
-		/* Disconnect before retry to ensure clean state */
-		WiFi.disconnect(true);
+			/* Disconnect before retry to ensure clean state */
+			WiFi.disconnect(false, false);
 
 		/* If not last attempt, wait before retry */
 		if (attempt < MaxAttempts)
@@ -1319,10 +1341,10 @@ int8_t RML_COMM_WiFi_Reconnect()
 			RML_COMM_Log_Msg(FuncName, e_INFO, "Reconnecting to %s...", StoredSSID);
 		}
 
-		/* Ensure clean state before connecting */
-		WiFi.disconnect(true);				/* true = turn off WiFi radio completely */
-		vTaskDelay(pdMS_TO_TICKS(500));		/* Give WiFi driver time to fully reset */
-		WiFi.mode(WIFI_STA);				/* Set station mode */
+			/* Ensure clean state before connecting without forcing full Wi-Fi uninit */
+			WiFi.disconnect(false, false);
+			vTaskDelay(pdMS_TO_TICKS(180));
+			WiFi.mode(WIFI_STA);				/* Set station mode */
 
 		WiFi.begin(StoredSSID, StoredPassword);
 
@@ -1360,8 +1382,8 @@ int8_t RML_COMM_WiFi_Reconnect()
 			RML_COMM_Log_Msg(FuncName, e_ERROR, "Reconnection attempt timed out");
 		}
 
-		/* Disconnect before retry to ensure clean state */
-		WiFi.disconnect(true);
+			/* Disconnect before retry to ensure clean state */
+			WiFi.disconnect(false, false);
 
 		/* If not last attempt, wait before retry */
 		if (attempt < StoredMaxAttempts)
@@ -1550,12 +1572,36 @@ void RML_COMM_OTA_Handle()
 
 
 
+void _RML_COMM_LED_Lock()
+{
+	RML_COMM_LED_EnsureMutex();
+
+	if (LED_Mutex != NULL)
+	{
+		xSemaphoreTake(LED_Mutex, portMAX_DELAY);
+	}
+}
+
+
+
+void _RML_COMM_LED_Unlock()
+{
+	if (LED_Mutex != NULL)
+	{
+		xSemaphoreGive(LED_Mutex);
+	}
+}
+
+
+
 void RML_COMM_LED_Init(Adafruit_NeoPixel &LED_Obj, uint8_t Brightness)
 {
+	_RML_COMM_LED_Lock();
 	LED_Obj.begin();
 	LED_Obj.setBrightness(Brightness);
 	LED_Obj.clear();
 	LED_Obj.show();
+	_RML_COMM_LED_Unlock();
 }
 
 
@@ -1571,6 +1617,8 @@ int8_t RML_COMM_LED_SetColor(Adafruit_NeoPixel &LED_Obj, uint8_t Red, uint8_t Gr
 		return -1;
 	}
 
+	_RML_COMM_LED_Lock();
+
 	// Set the color for the LED
 	const uint32_t Color = LED_Obj.Color(Red, Green, Blue);
     LED_Obj.fill(Color, 0, NumLEDs);
@@ -1580,6 +1628,7 @@ int8_t RML_COMM_LED_SetColor(Adafruit_NeoPixel &LED_Obj, uint8_t Red, uint8_t Gr
 
 	// Wait for a short time to allow the LEDs to update
 	vTaskDelay(pdMS_TO_TICKS(1));
+	_RML_COMM_LED_Unlock();
 
 	return 0;
 }
@@ -1588,18 +1637,22 @@ int8_t RML_COMM_LED_SetColor(Adafruit_NeoPixel &LED_Obj, uint8_t Red, uint8_t Gr
 
 void RML_COMM_LED_Off(Adafruit_NeoPixel &LED_Obj)
 {
+	_RML_COMM_LED_Lock();
 	LED_Obj.clear();
 	LED_Obj.show();
 	vTaskDelay(pdMS_TO_TICKS(1));
+	_RML_COMM_LED_Unlock();
 }
 
 
 
 void RML_COMM_LED_SetBrightness(Adafruit_NeoPixel &LED_Obj, uint8_t Brightness)
 {
+	_RML_COMM_LED_Lock();
 	LED_Obj.setBrightness(Brightness);
 	LED_Obj.show();
 	vTaskDelay(pdMS_TO_TICKS(1));
+	_RML_COMM_LED_Unlock();
 }
 
 
@@ -1620,10 +1673,12 @@ int8_t RML_COMM_LED_SetPixels(Adafruit_NeoPixel &LED_Obj, uint16_t StartIndex, u
 		Count = NumLEDs - StartIndex;
 	}
 
+	_RML_COMM_LED_Lock();
 	const uint32_t Color = LED_Obj.Color(Red, Green, Blue);
 	LED_Obj.fill(Color, StartIndex, Count);
 	LED_Obj.show();
 	vTaskDelay(pdMS_TO_TICKS(1));
+	_RML_COMM_LED_Unlock();
 
 	return 0;
 }
